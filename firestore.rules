@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // One ledger document per Google user. No listing other users.
+    match /users/{userId} {
+      allow get, create, update, delete: if request.auth != null
+        && request.auth.uid == userId
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+      allow list: if false;
+    }
+  }
+}
