@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=11" />
+  <link rel="stylesheet" href="styles.css?v=21" />
   <script>
     try {
       const t = localStorage.getItem("ledger.theme") || "light";
@@ -62,10 +62,6 @@
     <main class="main">
       <header class="topbar">
         <button class="ghost icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu">☰</button>
-        <div class="search">
-          <span>⌕</span>
-          <input id="globalSearch" type="search" placeholder="Search merchants, categories, notes…" />
-        </div>
         <button class="avatar" id="openProfile" type="button" title="Edit profile">Y</button>
         <div class="top-actions">
           <div class="month-nav">
@@ -121,10 +117,10 @@
         <div class="grid-2">
           <section class="card">
             <div class="card-head">
-              <h2>Spend by category</h2>
-              <span class="chip">This month</span>
+              <h2>Budget health</h2>
+              <button class="link" data-goto="budgets">Manage →</button>
             </div>
-            <div id="categoryBars" class="cat-list"></div>
+            <div id="budgetPreview" class="budget-preview"></div>
           </section>
 
           <section class="card flow-card">
@@ -176,10 +172,10 @@
         <div class="grid-2">
           <section class="card">
             <div class="card-head">
-              <h2>Budget health</h2>
-              <button class="link" data-goto="budgets">Manage →</button>
+              <h2>Top merchants</h2>
+              <span class="chip">This month</span>
             </div>
-            <div id="budgetPreview" class="budget-preview"></div>
+            <div id="merchantBars" class="cat-list"></div>
           </section>
 
           <section class="card">
@@ -197,9 +193,13 @@
         <div class="page-head">
           <div>
             <h1>Transactions</h1>
-            <p class="muted">Filter, recategorize, and reconcile activity.</p>
+            <p class="muted">Search, filter, and reconcile activity.</p>
           </div>
           <div class="filters">
+            <div class="search">
+              <span>⌕</span>
+              <input id="txSearch" type="search" placeholder="Merchant, category, account…" />
+            </div>
             <select id="filterType">
               <option value="all">All types</option>
               <option value="expense">Expenses</option>
@@ -246,7 +246,7 @@
         <div class="page-head">
           <div>
             <h1>Savings goals</h1>
-            <p class="muted">Targets funded from leftover budget.</p>
+            <p class="muted">Click a goal to edit. Use + to top up.</p>
           </div>
           <button class="primary" id="openAddGoal">+ Add goal</button>
         </div>
@@ -363,7 +363,7 @@
   <div class="modal-backdrop" id="goalModal">
     <div class="modal">
       <div class="modal-head">
-        <h2>Add goal</h2>
+        <h2 id="goalModalTitle">Add goal</h2>
         <button class="ghost" id="closeAddGoal">✕</button>
       </div>
       <form id="goalForm">
@@ -383,7 +383,25 @@
         </label>
         <div class="modal-actions">
           <button type="button" class="ghost" id="cancelAddGoal">Cancel</button>
-          <button type="submit" class="primary">Save goal</button>
+          <button type="submit" class="primary" id="goalSubmit">Save goal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="goalTopupModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="goalTopupTitle">Top up</h2>
+        <button class="ghost" id="closeGoalTopup">✕</button>
+      </div>
+      <form id="goalTopupForm">
+        <label>Amount (₹)
+          <input name="amount" type="number" step="1" min="1" required placeholder="500" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="cancelGoalTopup">Cancel</button>
+          <button type="submit" class="primary">Add to goal</button>
         </div>
       </form>
     </div>
@@ -452,6 +470,6 @@
   </div>
 
   <div class="toast" id="toast" hidden></div>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

@@ -12,10 +12,10 @@ Screenshots use the bundled sample ledger in [`examples/demo.json`](examples/dem
 
 ## Features
 
-- **Dashboard** — net cash, income, spend, savings rate, spend-by-category, and a 30-day or calendar-month cash-flow chart
+- **Dashboard** — net cash, income, spend, savings rate, budget health, top merchants, and a 30-day or calendar-month cash-flow chart
 - **Transactions** — search, filter by type/category, and a dated ledger table
-- **Budgets** — per-category caps with typed amounts and over-budget highlighting
-- **Goals** — savings targets with progress rings
+- **Budgets** — per-category caps with a donut, typed monthly cap, and over-budget highlighting
+- **Goals** — savings targets with on-track / behind / good status, a progress bar, and top-up
 - **Reports** — average daily spend, top category, bills, and a six-month income vs spend trend
 - **Accounts** — checking, savings, credit, and cash; balances update when you add activity
 - **Smart merchants** — Zepto, Swiggy, Uber, Amazon, and similar names are categorized for you

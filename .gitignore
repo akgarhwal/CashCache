@@ -1,2 +1,4 @@
 .DS_Store
 node_modules/
+mock-budget-cards.html
+docs/screenshots/budgets-preview.png
