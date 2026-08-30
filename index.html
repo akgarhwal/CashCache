@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#e8f3fc" id="themeColor" />
+  <title>CashCache — Know where it goes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=7" />
+  <script>
+    try {
+      const t = localStorage.getItem("ledger.theme") || "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">C</div>
+        <div class="brand-text">
+          <div class="brand-name">CashCache</div>
+          <div class="brand-sub">Know where it goes</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-ico">◈</span><span class="nav-label">Dashboard</span>
+        </button>
+        <button class="nav-item" data-view="transactions">
+          <span class="nav-ico">⇄</span><span class="nav-label">Transactions</span>
+        </button>
+        <button class="nav-item" data-view="budgets">
+          <span class="nav-ico">▣</span><span class="nav-label">Budgets</span>
+        </button>
+        <button class="nav-item" data-view="goals">
+          <span class="nav-ico">◎</span><span class="nav-label">Goals</span>
+        </button>
+        <button class="nav-item" data-view="reports">
+          <span class="nav-ico">▦</span><span class="nav-label">Reports</span>
+        </button>
+        <button class="nav-item" data-view="accounts">
+          <span class="nav-ico">⬡</span><span class="nav-label">Accounts</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="plan-card">
+          <div class="plan-label">Workspace</div>
+          <div class="plan-name" id="planName">Personal · Aug 2026</div>
+          <div class="plan-bar"><span id="planBar" style="width:0%"></span></div>
+          <div class="plan-meta" id="planMeta">Set a budget to track this month</div>
+        </div>
+      </div>
+    </aside>
+    <div class="nav-scrim" id="navScrim" hidden></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="ghost icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu">☰</button>
+        <div class="search">
+          <span>⌕</span>
+          <input id="globalSearch" type="search" placeholder="Search merchants, categories, notes…" />
+        </div>
+        <button class="avatar" id="openProfile" type="button" title="Edit profile">Y</button>
+        <div class="top-actions">
+          <div class="month-nav">
+            <button class="ghost" id="monthPrev" title="Previous month">‹</button>
+            <div class="month-pill" id="monthLabel">August 2026</div>
+            <button class="ghost" id="monthNext" title="Next month">›</button>
+          </div>
+          <div class="data-tools">
+            <button class="ghost icon-btn" id="themeToggle" type="button" title="Switch to dark theme" aria-label="Toggle theme">☾</button>
+            <span class="sync-pill unsynced" id="syncStatus" title="Not saved to a file yet">Not saved</span>
+            <button class="ghost" id="saveJson" type="button" title="Save CashCache to a file"><span class="btn-full">Save file</span><span class="btn-short">Save</span></button>
+            <button class="ghost" id="reloadJson" type="button" title="Load ledger data from a file">Reload</button>
+            <input type="file" id="jsonFile" accept="application/json,.json" hidden />
+          </div>
+          <div class="add-row">
+            <button class="primary" id="openAdd"><span class="btn-full">+ Add transaction</span><span class="btn-short">+ Add</span></button>
+          </div>
+        </div>
+      </header>
+
+      <!-- DASHBOARD -->
+      <section class="view active" id="view-dashboard">
+        <div class="page-head">
+          <div>
+            <h1>Overview</h1>
+            <p class="muted">Cash position and spend for the selected month.</p>
+          </div>
+        </div>
+
+        <div class="kpi-row">
+          <article class="kpi">
+            <div class="kpi-label">Net cash</div>
+            <div class="kpi-value" id="kpiNet">₹0.00</div>
+            <div class="kpi-delta" id="kpiNetDelta">Add accounts and activity</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-label">Income</div>
+            <div class="kpi-value good" id="kpiIncome">₹0.00</div>
+            <div class="kpi-delta" id="kpiIncomeDelta">No income this month</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-label">Spent</div>
+            <div class="kpi-value bad" id="kpiSpent">₹0.00</div>
+            <div class="kpi-delta" id="kpiSpentDelta">No budget set</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-label">Saved</div>
+            <div class="kpi-value" id="kpiSaved">₹0.00</div>
+            <div class="kpi-delta" id="kpiSavedDelta">Add income to see a rate</div>
+          </article>
+        </div>
+
+        <div class="grid-2">
+          <section class="card">
+            <div class="card-head">
+              <h2>Spend by category</h2>
+              <span class="chip">This month</span>
+            </div>
+            <div id="categoryBars" class="cat-list"></div>
+          </section>
+
+          <section class="card flow-card">
+            <div class="card-head flow-head">
+              <h2 id="flowTitle">Cash flow</h2>
+              <div class="flow-stats" id="flowStats"></div>
+            </div>
+            <div class="flow-controls">
+              <div class="seg" id="flowRangeSeg" role="tablist" aria-label="Cash flow range">
+                <button type="button" data-range="30" class="active">30 days</button>
+                <button type="button" data-range="month">Month</button>
+              </div>
+              <div class="flow-month-nav" id="flowMonthNav" hidden>
+                <button type="button" class="ghost icon-btn" id="flowMonthPrev" title="Previous month">‹</button>
+                <button type="button" class="flow-month-btn" id="flowMonthLabel" aria-haspopup="dialog" aria-expanded="false">September 2026</button>
+                <button type="button" class="ghost icon-btn" id="flowMonthNext" title="Next month">›</button>
+                <div class="month-pop" id="flowMonthPop" hidden>
+                  <div class="month-pop-year">
+                    <button type="button" class="ghost icon-btn" id="flowYearPrev" title="Previous year">‹</button>
+                    <span id="flowYearLabel">2026</span>
+                    <button type="button" class="ghost icon-btn" id="flowYearNext" title="Next year">›</button>
+                  </div>
+                  <div class="month-pop-grid" id="flowMonthGrid"></div>
+                  <button type="button" class="link month-pop-now" id="flowMonthNow">Use workspace month</button>
+                </div>
+              </div>
+            </div>
+            <div class="flow-board">
+              <div class="flow-y" id="flowYAxis" aria-hidden="true"></div>
+              <div class="flow-plot">
+                <div class="flow-main">
+                  <div class="flow-grid" aria-hidden="true">
+                    <span></span><span></span><span class="zero"></span><span></span><span></span>
+                  </div>
+                  <div class="flow-chart" id="flowChart" role="img" aria-label="Daily inflow and outflow for the selected month"></div>
+                </div>
+                <div class="flow-x" id="flowXAxis"></div>
+              </div>
+            </div>
+            <div class="legend">
+              <span><i class="dot in"></i> Inflow</span>
+              <span><i class="dot out"></i> Outflow</span>
+              <span class="legend-note">Split at ₹0 · hover a day for detail</span>
+            </div>
+            <div class="flow-tip" id="flowTip" hidden></div>
+          </section>
+        </div>
+
+        <div class="grid-2">
+          <section class="card">
+            <div class="card-head">
+              <h2>Budget health</h2>
+              <button class="link" data-goto="budgets">Manage →</button>
+            </div>
+            <div id="budgetPreview" class="budget-preview"></div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <h2>Recent activity</h2>
+              <button class="link" data-goto="transactions">See all →</button>
+            </div>
+            <div id="recentTx" class="tx-list compact"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- TRANSACTIONS -->
+      <section class="view" id="view-transactions">
+        <div class="page-head">
+          <div>
+            <h1>Transactions</h1>
+            <p class="muted">Filter, recategorize, and reconcile activity.</p>
+          </div>
+          <div class="filters">
+            <select id="filterType">
+              <option value="all">All types</option>
+              <option value="expense">Expenses</option>
+              <option value="income">Income</option>
+            </select>
+            <select id="filterCat">
+              <option value="all">All categories</option>
+            </select>
+          </div>
+        </div>
+        <section class="card flush">
+          <table class="table" id="txTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Merchant</th>
+                <th>Category</th>
+                <th>Account</th>
+                <th class="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </section>
+
+      <!-- BUDGETS -->
+      <section class="view" id="view-budgets">
+        <div class="page-head">
+          <div>
+            <h1>Budgets</h1>
+            <p class="muted">Drag a slider, type a cap, or delete a category.</p>
+          </div>
+          <div class="page-head-actions">
+            <div class="muted" id="budgetSummary"></div>
+            <button class="primary" id="openAddCat">+ Add category</button>
+          </div>
+        </div>
+        <div class="budget-grid" id="budgetGrid"></div>
+      </section>
+
+      <!-- GOALS -->
+      <section class="view" id="view-goals">
+        <div class="page-head">
+          <div>
+            <h1>Savings goals</h1>
+            <p class="muted">Targets funded from leftover budget.</p>
+          </div>
+          <button class="primary" id="openAddGoal">+ Add goal</button>
+        </div>
+        <div class="goals-grid" id="goalsGrid"></div>
+      </section>
+
+      <!-- REPORTS -->
+      <section class="view" id="view-reports">
+        <div class="page-head">
+          <div>
+            <h1>Reports</h1>
+            <p class="muted" id="rptSubtitle">Built from your transactions.</p>
+          </div>
+          <span class="chip" id="rptMonthChip">This month</span>
+        </div>
+        <div class="grid-3" id="reportStats"></div>
+        <section class="card">
+          <div class="card-head"><h2>Six-month trend</h2></div>
+          <div class="trend" id="trendChart"></div>
+        </section>
+      </section>
+
+      <!-- ACCOUNTS -->
+      <section class="view" id="view-accounts">
+        <div class="page-head">
+          <div>
+            <h1>Accounts</h1>
+            <p class="muted">Balances update when you add transactions.</p>
+          </div>
+          <button class="primary" id="openAddAcc">+ Add account</button>
+        </div>
+        <div class="accounts-grid" id="accountsGrid"></div>
+      </section>
+
+      <footer class="quote-foot">
+        <figure class="quote-bar" id="quoteBar">
+          <span class="quote-mark" aria-hidden="true">“</span>
+          <div class="quote-body">
+            <blockquote id="quoteText"></blockquote>
+            <figcaption id="quoteBy"></figcaption>
+          </div>
+        </figure>
+      </footer>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add transaction</h2>
+        <button class="ghost" id="closeAdd">✕</button>
+      </div>
+      <form id="txForm">
+        <label>Type
+          <select name="type" required>
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+        </label>
+        <label id="txWhoLabel"><span id="txWhoName">Merchant</span>
+          <input name="merchant" required placeholder="Merchant or payer" list="merchantHints" autocomplete="off" />
+          <datalist id="merchantHints"></datalist>
+        </label>
+        <div class="form-row">
+          <label>Amount
+            <input name="amount" type="number" step="0.01" min="0.01" required placeholder="0.00" />
+          </label>
+          <label>Date
+            <input name="date" type="date" required />
+          </label>
+        </div>
+        <div class="form-row" id="txCatRow">
+          <label id="txCatWrap">Category
+            <select name="category" id="formCat"></select>
+            <span class="cat-hint" id="txCatHint" hidden></span>
+          </label>
+          <label>Account
+            <select name="account" id="formAcc"></select>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="cancelAdd">Cancel</button>
+          <button type="submit" class="primary">Save transaction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="catModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add category</h2>
+        <button class="ghost" id="closeAddCat">✕</button>
+      </div>
+      <form id="catForm">
+        <label>Name
+          <input name="name" required maxlength="24" placeholder="Education, Gifts…" />
+        </label>
+        <label>Monthly budget (₹)
+          <input name="budget" type="number" step="10" min="0" required placeholder="0" />
+        </label>
+        <label>Color
+          <div class="swatches" id="catColors"></div>
+          <input type="hidden" name="color" id="catColorValue" required />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="cancelAddCat">Cancel</button>
+          <button type="submit" class="primary">Save category</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="goalModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add goal</h2>
+        <button class="ghost" id="closeAddGoal">✕</button>
+      </div>
+      <form id="goalForm">
+        <label>Name
+          <input name="name" required maxlength="32" placeholder="Emergency fund, Goa trip…" />
+        </label>
+        <div class="form-row">
+          <label>Target (₹)
+            <input name="target" type="number" step="100" min="100" required placeholder="10000" />
+          </label>
+          <label>Saved so far (₹)
+            <input name="saved" type="number" step="50" min="0" value="0" />
+          </label>
+        </div>
+        <label>Target month
+          <input name="eta" type="month" required />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="cancelAddGoal">Cancel</button>
+          <button type="submit" class="primary">Save goal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="accModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Add account</h2>
+        <button class="ghost" id="closeAddAcc">✕</button>
+      </div>
+      <form id="accForm">
+        <label>Name
+          <input name="name" required maxlength="40" placeholder="Everyday checking" />
+        </label>
+        <div class="form-row">
+          <label>Type
+            <select name="type" required>
+              <option>Checking</option>
+              <option>Savings</option>
+              <option>Credit</option>
+              <option>Cash</option>
+            </select>
+          </label>
+          <label>Opening balance (₹)
+            <input name="bal" type="number" step="0.01" value="0" />
+          </label>
+        </div>
+        <label>Institution
+          <input name="inst" maxlength="40" placeholder="Optional bank name" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="cancelAddAcc">Cancel</button>
+          <button type="submit" class="primary">Save account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="profileModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Profile</h2>
+        <button class="ghost" id="closeProfile">✕</button>
+      </div>
+      <form id="profileForm">
+        <div class="profile-preview">
+          <div class="avatar" id="profilePreview">Y</div>
+          <div>
+            <div id="profilePreviewName">You</div>
+            <div class="muted" id="profilePreviewSub">Personal workspace</div>
+          </div>
+        </div>
+        <label>Full name
+          <input name="name" required maxlength="48" placeholder="Your name" />
+        </label>
+        <label>Initials
+          <input name="initials" required maxlength="3" placeholder="AR" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="cancelProfile">Cancel</button>
+          <button type="submit" class="primary">Save profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="app.js?v=7"></script>
+</body>
+</html>

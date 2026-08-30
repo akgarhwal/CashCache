@@ -1,0 +1,1547 @@
+const CATEGORIES = [
+  { name: "Housing", color: "#4c8dff", budget: 0 },
+  { name: "Food", color: "#39b6e6", budget: 0 },
+  { name: "Transport", color: "#6a8cff", budget: 0 },
+  { name: "Bills", color: "#7c74e8", budget: 0 },
+  { name: "Health", color: "#5aa6f5", budget: 0 },
+  { name: "Shopping", color: "#8aaefc", budget: 0 },
+  { name: "Entertainment", color: "#4ec4c8", budget: 0 },
+  { name: "Other", color: "#7db7ff", budget: 0 },
+  { name: "Income", color: "#2b7fff", budget: 0 },
+];
+
+const ACCOUNTS = [
+  { name: "Everyday checking", inst: "", bal: 0, type: "Checking" },
+  { name: "Rewards card", inst: "", bal: 0, type: "Credit" },
+  { name: "High-yield savings", inst: "", bal: 0, type: "Savings" },
+];
+
+const GOALS = [];
+let tx = [];
+
+const months = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December"
+];
+const today = new Date();
+let monthIndex = today.getMonth();
+let year = today.getFullYear();
+
+const STORE_DATA = "ledger.data.v3";
+const STORE_THEME = "ledger.theme";
+const STORE_HASH = "ledger.fileHash.v3";
+const STORE_FILE = "ledger.fileName.v3";
+
+let profile = { name: "You", initials: "Y" };
+let theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+let lastFileHash = null;
+let lastFileName = null;
+let fileHandle = null;
+let flowRange = "30";
+let flowMonthKey = null;
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const money = (n) => (n < 0 ? "-" : "") + "₹" + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const MERCHANT_CATS = [
+  { cat: "Food", keys: ["zepto", "blinkit", "instamart", "bigbasket", "grofers", "dunzo", "swiggy", "zomato", "eatclub", "box8", "faasos", "dominos", "domino's", "mcdonald", "kfc", "burger king", "starbucks", "haldiram", "wow momo"] },
+  { cat: "Transport", keys: ["uber", "ola", "rapido", "metro", "irctc", "indigo", "air india", "fastag", "indian oil", "hp petrol", "bharat petroleum"] },
+  { cat: "Bills", keys: ["airtel", "jio", "vi prepaid", "vi postpaid", "bsnl", "tata power", "adani electricity", "bescom", "act fibernet", "netflix", "spotify", "hotstar", "jiohotstar", "amazon prime", "prime video", "youtube premium", "apple.com/bill", "chatgpt", "openai"] },
+  { cat: "Shopping", keys: ["amazon", "flipkart", "myntra", "ajio", "meesho", "nykaa", "croma", "reliance digital"] },
+  { cat: "Health", keys: ["apollo", "pharmeasy", "1mg", "netmeds", "practo", "fortis", "medplus"] },
+  { cat: "Entertainment", keys: ["bookmyshow", "pvr", "inox", "district by zomato"] },
+  { cat: "Housing", keys: ["nobroker", "housing.com", "rent", "society maintenance"] },
+];
+
+const MERCHANT_HINTS = [
+  "Zepto", "Blinkit", "Swiggy", "Zomato", "BigBasket", "Uber", "Ola", "Rapido",
+  "Amazon", "Flipkart", "Myntra", "Netflix", "Spotify", "Airtel", "Jio",
+  "Apollo Pharmacy", "PharmEasy", "BookMyShow",
+];
+
+const CAT_COLORS = [
+  "#4c8dff", "#39b6e6", "#6a8cff", "#7c74e8", "#5aa6f5", "#45c4e0",
+  "#8aaefc", "#4ec4c8", "#2b7fff", "#7db7ff", "#5b9dff", "#3ec8e0",
+];
+
+const MONEY_QUOTES = [
+  { t: "A budget is telling your money where to go instead of wondering where it went.", a: "John C. Maxwell" },
+  { t: "Do not save what is left after spending, but spend what is left after saving.", a: "Warren Buffett" },
+  { t: "Beware of little expenses; a small leak will sink a great ship.", a: "Benjamin Franklin" },
+  { t: "It's not how much money you make, but how much money you keep.", a: "Robert Kiyosaki" },
+  { t: "Never spend your money before you have earned it.", a: "Thomas Jefferson" },
+  { t: "Wealth consists not in having great possessions, but in having few wants.", a: "Epictetus" },
+  { t: "If you would be wealthy, think of saving as well as getting.", a: "Benjamin Franklin" },
+  { t: "It's not your salary that makes you rich, it's your spending habits.", a: "Charles A. Jaffe" },
+  { t: "You must gain control over your money or the lack of it will forever control you.", a: "Dave Ramsey" },
+  { t: "An investment in knowledge pays the best interest.", a: "Benjamin Franklin" },
+  { t: "Don't tell me where your priorities are. Show me where you spend your money and I'll tell you what they are.", a: "James W. Frick" },
+  { t: "The safest way to double your money is to fold it over once and put it in your pocket.", a: "Kin Hubbard" },
+  { t: "Compound interest is the eighth wonder of the world. He who understands it, earns it; he who doesn't, pays it.", a: "Attributed to Einstein" },
+  { t: "Too many people spend money they haven't earned, to buy things they don't want, to impress people they don't like.", a: "Will Rogers" },
+  { t: "Financial peace isn't the acquisition of stuff. It's learning to live on less than you make.", a: "Dave Ramsey" },
+  { t: "Time is more valuable than money. You can get more money, but you cannot get more time.", a: "Jim Rohn" },
+  { t: "Money is only a tool. It will take you wherever you wish, but it will not replace you as the driver.", a: "Ayn Rand" },
+  { t: "The habit of saving is itself an education.", a: "T. T. Munger" },
+  { t: "Save money and money will save you.", a: "Jamaican proverb" },
+  { t: "Never depend on a single income. Make an investment to create a second source.", a: "Warren Buffett" },
+];
+
+const STORE_QUOTE = "cashcache.quote";
+const QUOTE_MS = 60 * 60 * 1000;
+
+function pickQuoteIndex(exclude) {
+  let i = Math.floor(Math.random() * MONEY_QUOTES.length);
+  if (MONEY_QUOTES.length > 1 && i === exclude) i = (i + 1) % MONEY_QUOTES.length;
+  return i;
+}
+
+function readQuoteSlot() {
+  try {
+    const slot = JSON.parse(localStorage.getItem(STORE_QUOTE) || "null");
+    if (!slot || !Number.isInteger(slot.i) || !slot.at) return null;
+    if (!MONEY_QUOTES[slot.i]) return null;
+    return slot;
+  } catch (err) {
+    return null;
+  }
+}
+
+function paintQuote(q) {
+  const text = $("#quoteText");
+  const by = $("#quoteBy");
+  if (text) text.textContent = q.t;
+  if (by) by.textContent = "— " + q.a;
+}
+
+function startQuoteClock() {
+  let slot = readQuoteSlot();
+  const now = Date.now();
+  if (!slot || now - slot.at >= QUOTE_MS) {
+    slot = { i: pickQuoteIndex(slot ? slot.i : -1), at: now };
+    try { localStorage.setItem(STORE_QUOTE, JSON.stringify(slot)); } catch (err) {}
+  }
+  paintQuote(MONEY_QUOTES[slot.i]);
+  const wait = Math.max(1500, QUOTE_MS - (Date.now() - slot.at));
+  setTimeout(function tick() {
+    slot = { i: pickQuoteIndex(slot.i), at: Date.now() };
+    try { localStorage.setItem(STORE_QUOTE, JSON.stringify(slot)); } catch (err) {}
+    paintQuote(MONEY_QUOTES[slot.i]);
+    setTimeout(tick, QUOTE_MS);
+  }, wait);
+}
+
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { el.hidden = true; }, 2200);
+}
+
+function initialsFrom(name) {
+  return String(name)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase() || "?";
+}
+
+function exportState() {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    theme,
+    monthIndex,
+    year,
+    flowRange,
+    flowMonthKey,
+    profile: { name: profile.name, initials: profile.initials },
+    categories: CATEGORIES.map((c) => ({ ...c })),
+    accounts: ACCOUNTS.map((a) => ({ ...a })),
+    goals: GOALS.map((g) => ({ ...g })),
+    transactions: tx.map((t) => ({ ...t })),
+  };
+}
+
+function dataHash() {
+  return JSON.stringify({
+    profile,
+    categories: CATEGORIES,
+    accounts: ACCOUNTS,
+    goals: GOALS,
+    transactions: tx,
+  });
+}
+
+function updateSyncUI() {
+  const el = $("#syncStatus");
+  if (!el) return;
+  if (!lastFileHash) {
+    el.textContent = "Not saved";
+    el.className = "sync-pill unsynced";
+    el.title = "Save file to keep a local copy";
+    return;
+  }
+  if (lastFileHash === dataHash()) {
+    el.textContent = "Synced";
+    el.className = "sync-pill synced";
+    el.title = lastFileName ? `In sync with ${lastFileName}` : "In sync with last saved file";
+    return;
+  }
+  el.textContent = "Not synced";
+  el.className = "sync-pill unsynced";
+  el.title = lastFileName
+    ? `Changes are not in ${lastFileName} — Save file`
+    : "Unsaved changes — Save file to sync";
+}
+
+function persist() {
+  try {
+    localStorage.setItem(STORE_DATA, JSON.stringify(exportState()));
+    localStorage.setItem(STORE_THEME, theme);
+    if (lastFileHash) localStorage.setItem(STORE_HASH, lastFileHash);
+    else localStorage.removeItem(STORE_HASH);
+    if (lastFileName) localStorage.setItem(STORE_FILE, lastFileName);
+    else localStorage.removeItem(STORE_FILE);
+  } catch (err) {}
+  updateSyncUI();
+}
+
+function replaceArr(target, next) {
+  if (!Array.isArray(next)) return;
+  target.length = 0;
+  next.forEach((item) => target.push(item));
+}
+
+function applyTheme(next, { silent = false } = {}) {
+  theme = next === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = theme;
+  const meta = $("#themeColor");
+  if (meta) meta.setAttribute("content", theme === "dark" ? "#0b1020" : "#e8f3fc");
+  const btn = $("#themeToggle");
+  if (btn) {
+    const toLight = theme === "dark";
+    btn.textContent = toLight ? "☀" : "☾";
+    btn.title = toLight ? "Switch to light theme" : "Switch to dark theme";
+    btn.setAttribute("aria-label", btn.title);
+  }
+  try { localStorage.setItem(STORE_THEME, theme); } catch (err) {}
+  if (!silent) persist();
+}
+
+function applyState(data, { fromFile = false, fileName = null } = {}) {
+  if (!data || typeof data !== "object") throw new Error("Invalid ledger file");
+  const transactions = data.transactions || data.tx;
+  if (transactions && !Array.isArray(transactions)) throw new Error("Invalid transactions");
+  if (data.categories) replaceArr(CATEGORIES, data.categories);
+  if (data.accounts) replaceArr(ACCOUNTS, data.accounts);
+  if (data.goals) replaceArr(GOALS, data.goals);
+  if (transactions) {
+    tx = transactions.map((t) => ({
+      date: t.date,
+      merchant: t.merchant,
+      category: t.category,
+      account: t.account,
+      amount: Number(t.amount),
+      type: t.type || (Number(t.amount) >= 0 ? "income" : "expense"),
+    }));
+  }
+  if (data.profile && data.profile.name) {
+    profile.name = String(data.profile.name).trim();
+    profile.initials = String(data.profile.initials || initialsFrom(profile.name))
+      .slice(0, 3)
+      .toUpperCase();
+  }
+  if (Number.isInteger(data.monthIndex)) monthIndex = ((data.monthIndex % 12) + 12) % 12;
+  if (Number.isInteger(data.year)) year = data.year;
+  if (data.theme === "dark" || data.theme === "light") applyTheme(data.theme, { silent: true });
+  if (data.flowRange === "30" || data.flowRange === "month") flowRange = data.flowRange;
+  if (typeof data.flowMonthKey === "string" || data.flowMonthKey === null) flowMonthKey = data.flowMonthKey;
+  if (fromFile) {
+    lastFileHash = dataHash();
+    if (fileName) lastFileName = fileName;
+  }
+}
+
+function loadLocal() {
+  try {
+    lastFileHash = localStorage.getItem(STORE_HASH);
+    lastFileName = localStorage.getItem(STORE_FILE);
+    const raw = localStorage.getItem(STORE_DATA);
+    if (raw) applyState(JSON.parse(raw));
+  } catch (err) {}
+}
+
+function renderProfile() {
+  const av = $("#openProfile");
+  if (av) {
+    av.textContent = profile.initials;
+    av.title = `${profile.name} — edit profile`;
+  }
+  const plan = $("#planName");
+  if (plan) {
+    const first = profile.name.trim().split(/\s+/)[0] || "Personal";
+    plan.textContent = `${first} · ${months[monthIndex].slice(0, 3)} ${year}`;
+  }
+  const prev = $("#profilePreview");
+  if (prev) prev.textContent = profile.initials;
+  const pname = $("#profilePreviewName");
+  if (pname) pname.textContent = profile.name;
+}
+
+function downloadJson(json) {
+  lastFileName = lastFileName || "cashcache.json";
+  const blob = new Blob([json], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = lastFileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+async function saveJsonFile() {
+  const json = JSON.stringify(exportState(), null, 2);
+  try {
+    if (window.showSaveFilePicker) {
+      if (!fileHandle) {
+        fileHandle = await window.showSaveFilePicker({
+          suggestedName: lastFileName || "cashcache.json",
+          types: [{ description: "Ledger JSON", accept: { "application/json": [".json"] } }],
+        });
+      }
+      const writable = await fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      lastFileName = fileHandle.name || lastFileName || "cashcache.json";
+    } else {
+      downloadJson(json);
+    }
+    lastFileHash = dataHash();
+    persist();
+    toast(`Saved ${lastFileName || "cashcache.json"}`);
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    downloadJson(json);
+    lastFileHash = dataHash();
+    persist();
+    toast("Downloaded cashcache.json");
+  }
+}
+
+async function loadFromFile(file) {
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (err) {
+    toast("That file is not valid JSON.");
+    return;
+  }
+  try {
+    applyState(data, { fromFile: true, fileName: file.name });
+  } catch (err) {
+    toast("Could not read that ledger file.");
+    return;
+  }
+  populateSelects();
+  refresh();
+  toast(`Reloaded ${file.name}`);
+}
+
+async function reloadJsonFile() {
+  try {
+    if (fileHandle) {
+      const file = await fileHandle.getFile();
+      await loadFromFile(file);
+      return;
+    }
+  } catch (err) {}
+  $("#jsonFile").click();
+}
+
+function inMonth(t, y = year, m = monthIndex) {
+  const [ys, ms] = String(t.date).split("-").map(Number);
+  return ys === y && ms === m + 1;
+}
+
+function spentByCategory(y = year, m = monthIndex) {
+  const map = {};
+  CATEGORIES.forEach((c) => { if (c.name !== "Income") map[c.name] = 0; });
+  tx.filter((t) => t.amount < 0 && inMonth(t, y, m)).forEach((t) => {
+    map[t.category] = (map[t.category] || 0) + Math.abs(t.amount);
+  });
+  return map;
+}
+
+function totalsFor(y = year, m = monthIndex) {
+  const rows = tx.filter((t) => inMonth(t, y, m));
+  const income = rows.filter((t) => t.amount > 0).reduce((a, t) => a + t.amount, 0);
+  const spent = rows.filter((t) => t.amount < 0).reduce((a, t) => a + Math.abs(t.amount), 0);
+  return { income, spent, saved: income - spent };
+}
+
+function totals() {
+  const month = totalsFor();
+  const net = ACCOUNTS.reduce((a, x) => a + x.bal, 0);
+  return { ...month, net };
+}
+
+function prevMonth() {
+  return monthIndex === 0 ? { y: year - 1, m: 11 } : { y: year, m: monthIndex - 1 };
+}
+
+function setDelta(el, text, dir) {
+  if (!el) return;
+  el.textContent = text;
+  el.className = "kpi-delta" + (dir ? ` ${dir}` : "");
+}
+
+function renderPlan() {
+  const t = totals();
+  const budgetTotal = CATEGORIES.reduce((a, c) => a + (c.budget || 0), 0);
+  const used = budgetTotal ? Math.min(100, Math.round((t.spent / budgetTotal) * 100)) : 0;
+  const bar = $("#planBar");
+  const meta = $("#planMeta");
+  if (bar) bar.style.width = `${used}%`;
+  if (meta) {
+    meta.textContent = budgetTotal
+      ? `${used}% of monthly budget used`
+      : "Set a budget to track this month";
+  }
+}
+
+function renderKpis() {
+  const t = totals();
+  const prev = totalsFor(prevMonth().y, prevMonth().m);
+  const budgetTotal = CATEGORIES.reduce((a, c) => a + (c.budget || 0), 0);
+  const rate = t.income ? ((t.saved / t.income) * 100).toFixed(1) : "0.0";
+  const used = budgetTotal ? Math.round((t.spent / budgetTotal) * 100) : 0;
+  $("#kpiNet").textContent = money(t.net);
+  $("#kpiIncome").textContent = money(t.income);
+  $("#kpiSpent").textContent = money(t.spent);
+  $("#kpiSaved").textContent = money(t.saved);
+
+  const lastIn = tx.filter((x) => x.amount > 0 && inMonth(x)).sort((a, b) => b.date.localeCompare(a.date))[0];
+  setDelta($("#kpiNetDelta"), t.net ? "Across linked accounts" : "Add accounts and activity");
+  setDelta(
+    $("#kpiIncomeDelta"),
+    lastIn ? `Last · ${lastIn.date}` : "No income this month",
+    t.income ? "up" : ""
+  );
+  setDelta(
+    $("#kpiSpentDelta"),
+    budgetTotal ? `${used}% of ${money(budgetTotal)} budget` : "No budget set"
+  );
+  const savedDir = t.income ? (t.saved >= 0 ? "up" : "down") : "";
+  setDelta($("#kpiSavedDelta"), t.income ? `${rate}% savings rate` : "Add income to see a rate", savedDir);
+
+  const incChg = t.income - prev.income;
+  if (prev.income || t.income) {
+    setDelta(
+      $("#kpiIncomeDelta"),
+      `${incChg >= 0 ? "▲" : "▼"} ${money(Math.abs(incChg))} vs ${months[prevMonth().m].slice(0, 3)}`,
+      incChg >= 0 ? "up" : "down"
+    );
+  }
+  renderPlan();
+}
+
+function renderCategories() {
+  const spent = spentByCategory();
+  const rows = Object.entries(spent).filter(([, val]) => val > 0).sort((a, b) => b[1] - a[1]);
+  if (!rows.length) {
+    $("#categoryBars").innerHTML = `<div class="empty">No spending this month.</div>`;
+    return;
+  }
+  const max = Math.max(...rows.map((r) => r[1]), 1);
+  $("#categoryBars").innerHTML = rows
+    .map(([name, val]) => {
+      const cat = CATEGORIES.find((c) => c.name === name);
+      const pct = (val / max) * 100;
+      return `<div class="cat-row">
+        <div>${name}</div>
+        <div class="bar"><span style="width:${pct}%;background:${cat?.color || "#4c8dff"}"></span></div>
+        <div class="amt">${money(val)}</div>
+      </div>`;
+    })
+    .join("");
+}
+
+function compactINR(n) {
+  const sign = n < 0 ? "−" : "";
+  const a = Math.abs(n);
+  if (a >= 100000) return `${sign}₹${+(a / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `${sign}₹${+(a / 1000).toFixed(a % 1000 === 0 ? 0 : 1)}k`;
+  return `${sign}₹${Math.round(a)}`;
+}
+
+function niceMax(n) {
+  if (n <= 0) return 1;
+  const exp = 10 ** Math.floor(Math.log10(n));
+  const m = n / exp;
+  const nice = m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10;
+  return nice * exp;
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toISO(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function flowMonthParts() {
+  if (flowMonthKey && /^\d{4}-\d{2}$/.test(flowMonthKey)) {
+    const [y, m] = flowMonthKey.split("-").map(Number);
+    return { y, m: m - 1 };
+  }
+  return { y: year, m: monthIndex };
+}
+
+function dashboardMonthKey() {
+  return `${year}-${pad2(monthIndex + 1)}`;
+}
+
+function flowWindow() {
+  if (flowRange === "month") {
+    const { y, m } = flowMonthParts();
+    const n = new Date(y, m + 1, 0).getDate();
+    return Array.from({ length: n }, (_, i) => {
+      const date = new Date(y, m, i + 1);
+      return { date, day: i + 1, y, m };
+    });
+  }
+  const end = new Date(year, monthIndex + 1, 0);
+  return Array.from({ length: 30 }, (_, i) => {
+    const date = new Date(end);
+    date.setDate(end.getDate() - 29 + i);
+    return { date, day: date.getDate(), y: date.getFullYear(), m: date.getMonth() };
+  });
+}
+
+function flowSeries() {
+  const points = flowWindow();
+  const byIso = {};
+  points.forEach((p) => {
+    byIso[toISO(p.date)] = { ...p, in: 0, out: 0, notes: [] };
+  });
+
+  tx.forEach((t) => {
+    const b = byIso[t.date];
+    if (!b) return;
+    if (t.amount >= 0) b.in += t.amount;
+    else b.out += Math.abs(t.amount);
+    b.notes.push(t.merchant);
+  });
+
+  return points.map((p) => byIso[toISO(p.date)]);
+}
+
+let flowPopYear = null;
+
+function closeFlowPop() {
+  const pop = $("#flowMonthPop");
+  const label = $("#flowMonthLabel");
+  if (pop) pop.hidden = true;
+  if (label) label.setAttribute("aria-expanded", "false");
+}
+
+function paintFlowPop() {
+  const grid = $("#flowMonthGrid");
+  const yearLabel = $("#flowYearLabel");
+  if (!grid || !yearLabel) return;
+  const { y: selY, m: selM } = flowMonthParts();
+  const py = flowPopYear ?? selY;
+  yearLabel.textContent = py;
+  grid.innerHTML = months
+    .map((name, i) => {
+      const on = py === selY && i === selM;
+      const dash = py === year && i === monthIndex && !on;
+      return `<button type="button" class="month-cell${on ? " on" : ""}${dash ? " dash" : ""}" data-m="${i}">${name.slice(0, 3)}</button>`;
+    })
+    .join("");
+}
+
+function openFlowPop() {
+  const pop = $("#flowMonthPop");
+  const label = $("#flowMonthLabel");
+  if (!pop) return;
+  flowPopYear = flowMonthParts().y;
+  paintFlowPop();
+  pop.hidden = false;
+  if (label) label.setAttribute("aria-expanded", "true");
+}
+
+function setFlowMonth(y, m) {
+  flowRange = "month";
+  flowMonthKey = `${y}-${pad2(m + 1)}`;
+  closeFlowPop();
+  renderFlow();
+  persist();
+}
+
+function shiftFlowMonth(delta) {
+  const { y, m } = flowMonthParts();
+  const d = new Date(y, m + delta, 1);
+  setFlowMonth(d.getFullYear(), d.getMonth());
+}
+
+function syncFlowControls() {
+  $$("#flowRangeSeg [data-range]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.range === flowRange);
+  });
+  const nav = $("#flowMonthNav");
+  if (nav) nav.hidden = flowRange !== "month";
+  const { y, m } = flowMonthParts();
+  const label = $("#flowMonthLabel");
+  if (label) label.textContent = `${months[m]} ${y}`;
+  const title = $("#flowTitle");
+  if (title) {
+    title.textContent = flowRange === "month" ? `${months[m]} cash flow` : "30-day cash flow";
+  }
+  if (!$("#flowMonthPop")?.hidden) paintFlowPop();
+}
+
+function renderFlow() {
+  syncFlowControls();
+  const series = flowSeries();
+  const days = series.length;
+  const peak = Math.max(...series.flatMap((d) => [d.in, d.out]), 0);
+  const max = niceMax(peak || 1000);
+  const totalIn = series.reduce((a, d) => a + d.in, 0);
+  const totalOut = series.reduce((a, d) => a + d.out, 0);
+  const net = totalIn - totalOut;
+
+  const plot = $("#flowChart");
+  plot.style.setProperty("--days", days);
+  $("#flowXAxis").style.setProperty("--days", days);
+  plot.setAttribute(
+    "aria-label",
+    flowRange === "month"
+      ? `Daily inflow and outflow for ${$("#flowTitle").textContent}`
+      : "Daily inflow and outflow for the last 30 days"
+  );
+
+  $("#flowYAxis").innerHTML = [max, max / 2, 0, -max / 2, -max]
+    .map((v) => `<span>${compactINR(v)}</span>`)
+    .join("");
+
+  $("#flowStats").innerHTML = `
+    <span class="chip good">In ${compactINR(totalIn)}</span>
+    <span class="chip bad">Out ${compactINR(totalOut)}</span>
+    <span class="chip">${net >= 0 ? "+" : ""}${compactINR(net)} net</span>
+  `;
+
+  plot.innerHTML = series
+    .map((d, i) => {
+      const inH = d.in ? Math.max(8, (d.in / max) * 100) : 0;
+      const outH = d.out ? Math.max(8, (d.out / max) * 100) : 0;
+      const weekend = [0, 6].includes(d.date.getDay());
+      const label = `${d.day} ${months[d.m].slice(0, 3)} ${d.y}`;
+      const notes = d.notes.slice(0, 3).join(" · ");
+      return `<div class="flow-col${weekend ? " wknd" : ""}" style="--i:${i}"
+        data-in="${d.in}" data-out="${d.out}" data-label="${esc(label)}" data-notes="${esc(notes)}"
+        role="listitem" aria-label="${esc(label)}: inflow ${money(d.in)}, outflow ${money(d.out)}">
+        <div class="flow-up">${d.in ? `<div class="in" style="height:${inH}%"></div>` : ""}</div>
+        <div class="flow-dn">${d.out ? `<div class="out" style="height:${outH}%"></div>` : ""}</div>
+      </div>`;
+    })
+    .join("");
+
+  $("#flowXAxis").innerHTML = series
+    .map((d, i) => {
+      const isLast = i === days - 1;
+      const isTick = flowRange === "month"
+        ? d.day === 1 || d.day % 5 === 0
+        : i === 0 || (i + 1) % 5 === 0;
+      const show = isLast || (isTick && i < days - 2);
+      if (!show) return "<span></span>";
+      const spansMonth = flowRange === "30" && d.m !== monthIndex;
+      const text = spansMonth ? `${d.day} ${months[d.m].slice(0, 3)}` : String(d.day);
+      return `<span>${text}</span>`;
+    })
+    .join("");
+}
+
+function bindFlowChart() {
+  const chart = $("#flowChart");
+  const tip = $("#flowTip");
+  const card = chart.closest(".flow-card");
+  if (!chart || !tip || !card) return;
+
+  chart.addEventListener("pointerover", (e) => {
+    const col = e.target.closest(".flow-col");
+    if (!col) return;
+    $$(".flow-col.active", chart).forEach((c) => c.classList.remove("active"));
+    col.classList.add("active");
+    const inn = Number(col.dataset.in);
+    const out = Number(col.dataset.out);
+    const net = inn - out;
+    const notes = col.dataset.notes;
+    tip.hidden = false;
+    tip.innerHTML = `
+      <div class="tip-date">${col.dataset.label}</div>
+      ${notes ? `<div class="tip-notes">${notes}</div>` : ""}
+      <div class="tip-row"><span>Inflow</span><b class="in">${inn ? money(inn) : "—"}</b></div>
+      <div class="tip-row"><span>Outflow</span><b class="out">${out ? money(out) : "—"}</b></div>
+      <div class="tip-row total"><span>Net</span><b class="${net >= 0 ? "up" : "down"}">${net >= 0 ? "+" : ""}${money(net)}</b></div>
+    `;
+  });
+
+  chart.addEventListener("pointermove", (e) => {
+    if (tip.hidden) return;
+    const r = card.getBoundingClientRect();
+    const tw = tip.offsetWidth || 180;
+    const th = tip.offsetHeight || 110;
+    let x = e.clientX - r.left + 14;
+    let y = e.clientY - r.top + 14;
+    if (x + tw > r.width - 8) x = e.clientX - r.left - tw - 12;
+    if (y + th > r.height - 8) y = e.clientY - r.top - th - 12;
+    tip.style.transform = `translate(${Math.max(8, x)}px, ${Math.max(8, y)}px)`;
+  });
+
+  chart.addEventListener("pointerleave", () => {
+    tip.hidden = true;
+    $$(".flow-col.active", chart).forEach((c) => c.classList.remove("active"));
+  });
+}
+
+function bindFlowRange() {
+  const seg = $("#flowRangeSeg");
+  if (seg) {
+    seg.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-range]");
+      if (!btn) return;
+      flowRange = btn.dataset.range;
+      if (flowRange === "month" && !flowMonthKey) flowMonthKey = dashboardMonthKey();
+      if (flowRange !== "month") closeFlowPop();
+      renderFlow();
+      persist();
+    });
+  }
+  $("#flowMonthPrev")?.addEventListener("click", () => shiftFlowMonth(-1));
+  $("#flowMonthNext")?.addEventListener("click", () => shiftFlowMonth(1));
+  $("#flowMonthLabel")?.addEventListener("click", () => {
+    const pop = $("#flowMonthPop");
+    if (!pop) return;
+    if (pop.hidden) openFlowPop();
+    else closeFlowPop();
+  });
+  $("#flowYearPrev")?.addEventListener("click", () => {
+    flowPopYear = (flowPopYear ?? flowMonthParts().y) - 1;
+    paintFlowPop();
+  });
+  $("#flowYearNext")?.addEventListener("click", () => {
+    flowPopYear = (flowPopYear ?? flowMonthParts().y) + 1;
+    paintFlowPop();
+  });
+  $("#flowMonthGrid")?.addEventListener("click", (e) => {
+    const cell = e.target.closest("[data-m]");
+    if (!cell) return;
+    const py = flowPopYear ?? flowMonthParts().y;
+    setFlowMonth(py, Number(cell.dataset.m));
+  });
+  $("#flowMonthNow")?.addEventListener("click", () => {
+    setFlowMonth(year, monthIndex);
+  });
+  document.addEventListener("click", (e) => {
+    const nav = $("#flowMonthNav");
+    if (nav && !nav.contains(e.target)) closeFlowPop();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeFlowPop();
+  });
+}
+
+function renderBudgetPreview() {
+  const spent = spentByCategory();
+  const rows = CATEGORIES.filter((c) => c.budget)
+    .slice(0, 5)
+    .map((c) => {
+      const used = spent[c.name] || 0;
+      const pct = Math.min(100, (used / c.budget) * 100);
+      const over = used > c.budget;
+      return `<div class="bp ${over ? "over" : ""}">
+        <div>${c.name}</div>
+        <div class="amt">${money(used)} / ${money(c.budget)}</div>
+        <div class="bar"><span style="width:${pct}%;background:${over ? "var(--coral)" : c.color}"></span></div>
+      </div>`;
+    })
+    .join("");
+  $("#budgetPreview").innerHTML = rows || `<div class="empty">Set a category budget to track health.</div>`;
+}
+
+function renderRecent() {
+  const rows = tx
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 6);
+  $("#recentTx").innerHTML = rows.length
+    ? rows.map(txRow).join("")
+    : `<div class="empty">No transactions yet. Add one to get started.</div>`;
+}
+
+function txRow(t) {
+  const sign = t.amount >= 0 ? "+" : "−";
+  return `<div class="tx">
+    <div class="tx-ico">${t.amount >= 0 ? "↑" : "↓"}</div>
+    <div>
+      <div class="tx-name">${t.merchant}</div>
+      <div class="tx-meta">${t.date} · ${t.category} · ${t.account}</div>
+    </div>
+    <div class="tx-amt ${t.amount >= 0 ? "income" : ""}">${sign}${money(Math.abs(t.amount))}</div>
+  </div>`;
+}
+
+function renderTable() {
+  const type = $("#filterType").value;
+  const cat = $("#filterCat").value;
+  const q = $("#globalSearch").value.toLowerCase();
+  const rows = tx
+    .filter((t) => (type === "all" ? true : t.type === type))
+    .filter((t) => (cat === "all" ? true : t.category === cat))
+    .filter((t) =>
+      !q || t.merchant.toLowerCase().includes(q) || t.category.toLowerCase().includes(q)
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (!rows.length) {
+    $("#txTable tbody").innerHTML = `<tr><td colspan="5" class="empty">No transactions yet.</td></tr>`;
+    return;
+  }
+
+  $("#txTable tbody").innerHTML = rows
+    .map(
+      (t) => `<tr>
+        <td>${t.date}</td>
+        <td>${t.merchant}</td>
+        <td><span class="cat-pill">${t.category}</span></td>
+        <td>${t.account}</td>
+        <td class="num ${t.amount >= 0 ? "income" : ""}" style="${t.amount >= 0 ? "color:var(--mint)" : ""}">${money(t.amount)}</td>
+      </tr>`
+    )
+    .join("");
+}
+
+function sliderMaxFor(budget) {
+  return Math.max(10000, Math.ceil(Math.max(budget, 50) / 100) * 100);
+}
+
+function budgetCardEl(name) {
+  return $$("#budgetGrid [data-cat]").find((el) => el.dataset.cat === name);
+}
+
+function updateBudgetSummary() {
+  const spent = spentByCategory();
+  let allocated = 0;
+  let used = 0;
+  CATEGORIES.filter((c) => c.name !== "Income").forEach((c) => {
+    allocated += c.budget || 0;
+    used += spent[c.name] || 0;
+  });
+  const el = $("#budgetSummary");
+  if (el) el.textContent = `${money(used)} used of ${money(allocated)} allocated`;
+}
+
+function paintBudgetCard(card, cat) {
+  const spent = spentByCategory()[cat.name] || 0;
+  const left = cat.budget - spent;
+  const pct = Math.min(100, cat.budget ? (spent / cat.budget) * 100 : 0);
+  const meta = card.querySelector(".meta");
+  if (meta) meta.textContent = `${money(spent)} spent · ${money(left)} left of ${money(cat.budget)}`;
+  const fill = card.querySelector(".bar > span");
+  if (fill) {
+    fill.style.width = `${pct}%`;
+    fill.style.background = spent > cat.budget ? "var(--coral)" : cat.color;
+  }
+}
+
+function applyBudget(name, value, source) {
+  const cat = CATEGORIES.find((c) => c.name === name);
+  if (!cat) return;
+  const n = Math.max(0, Math.round(Number(value)));
+  if (!Number.isFinite(n)) return;
+  cat.budget = n;
+  const card = budgetCardEl(name);
+  if (card) {
+    paintBudgetCard(card, cat);
+    const range = card.querySelector("input[type=range]");
+    const num = card.querySelector("input[type=number]");
+    const max = sliderMaxFor(n);
+    if (range) {
+      if (Number(range.max) < n) range.max = max;
+      if (source !== "range") range.value = n;
+    }
+    if (num && source !== "number") num.value = n;
+  }
+  updateBudgetSummary();
+  renderBudgetPreview();
+  renderKpis();
+  persist();
+}
+
+function deleteCategory(name) {
+  if (name === "Income") {
+    toast("Income can't be deleted.");
+    return;
+  }
+  const i = CATEGORIES.findIndex((c) => c.name === name);
+  if (i < 0) return;
+  if (!confirm(`Delete category “${name}”?`)) return;
+  CATEGORIES.splice(i, 1);
+  populateSelects();
+  refresh();
+  toast(`${name} deleted.`);
+}
+
+function renderBudgets() {
+  const spent = spentByCategory();
+  $("#budgetGrid").innerHTML = CATEGORIES.filter((c) => c.name !== "Income")
+    .map((c) => {
+      const s = spent[c.name] || 0;
+      const pct = Math.min(100, c.budget ? (s / c.budget) * 100 : 0);
+      const left = c.budget - s;
+      const max = sliderMaxFor(c.budget);
+      return `<article class="card budget-card" data-cat="${esc(c.name)}">
+        <div class="budget-card-head">
+          <h3><span class="cat-dot" style="background:${c.color}"></span>${esc(c.name)}</h3>
+          <button type="button" class="ghost icon-btn cat-del" data-delete title="Delete ${esc(c.name)}">✕</button>
+        </div>
+        <div class="meta">${money(s)} spent · ${money(left)} left of ${money(c.budget)}</div>
+        <div class="bar"><span style="width:${pct}%;background:${s > c.budget ? "var(--coral)" : c.color}"></span></div>
+        <div class="budget-edit">
+          <input type="range" min="0" max="${max}" step="10" value="${c.budget}" aria-label="${esc(c.name)} budget" style="accent-color:${c.color}" />
+          <input type="number" class="budget-num" min="0" step="10" value="${c.budget}" aria-label="${esc(c.name)} budget amount" />
+        </div>
+      </article>`;
+    })
+    .join("") + `<button type="button" class="add-tile" id="openAddCatTile">
+      <span class="add-plus">+</span>
+      <span>Add category</span>
+    </button>`;
+  updateBudgetSummary();
+}
+
+function bindBudgetGrid() {
+  const grid = $("#budgetGrid");
+  if (!grid || grid.dataset.bound) return;
+  grid.dataset.bound = "1";
+  grid.addEventListener("click", (e) => {
+    if (e.target.closest("#openAddCatTile")) openCatModal();
+    const del = e.target.closest("[data-delete]");
+    if (del) {
+      const card = del.closest("[data-cat]");
+      if (card) deleteCategory(card.dataset.cat);
+    }
+  });
+  grid.addEventListener("input", (e) => {
+    const card = e.target.closest("[data-cat]");
+    if (!card) return;
+    const name = card.dataset.cat;
+    if (e.target.matches("input[type=range]")) applyBudget(name, e.target.value, "range");
+    if (e.target.matches("input[type=number]")) {
+      const n = Number(e.target.value);
+      if (Number.isFinite(n) && n >= 0) applyBudget(name, n, "number");
+    }
+  });
+  grid.addEventListener("change", (e) => {
+    const card = e.target.closest("[data-cat]");
+    if (!card || !e.target.matches("input[type=number]")) return;
+    applyBudget(card.dataset.cat, e.target.value, "number");
+  });
+}
+
+function deleteGoal(name) {
+  const i = GOALS.findIndex((g) => g.name === name);
+  if (i < 0) return;
+  if (!confirm(`Delete goal “${name}”?`)) return;
+  GOALS.splice(i, 1);
+  refresh();
+  toast(`${name} deleted.`);
+}
+
+function deleteAccount(name) {
+  const i = ACCOUNTS.findIndex((a) => a.name === name);
+  if (i < 0) return;
+  if (!confirm(`Delete account “${name}”?`)) return;
+  ACCOUNTS.splice(i, 1);
+  populateSelects();
+  refresh();
+  toast(`${name} deleted.`);
+}
+
+function renderGoals() {
+  $("#goalsGrid").innerHTML = GOALS.map((g) => {
+    const pct = Math.min(100, Math.round((g.saved / g.target) * 100) || 0);
+    const deg = Math.round(pct * 3.6);
+    return `<article class="card goal" data-goal="${esc(g.name)}">
+      <div class="budget-card-head">
+        <div>
+          <h2>${esc(g.name)}</h2>
+          <div class="muted">ETA ${esc(g.eta)}</div>
+        </div>
+        <button type="button" class="ghost icon-btn cat-del" data-delete-goal title="Delete ${esc(g.name)}">✕</button>
+      </div>
+      <div class="ring-wrap">
+        <div class="ring" style="background:conic-gradient(var(--mint) ${deg}deg, var(--ring-track) 0)">
+          <div style="width:54px;height:54px;border-radius:50%;background:var(--surface);display:grid;place-items:center">${pct}%</div>
+        </div>
+        <div>
+          <div class="kpi-value" style="font-size:18px">${money(g.saved)}</div>
+          <div class="muted">of ${money(g.target)}</div>
+        </div>
+      </div>
+    </article>`;
+  }).join("") + `<button type="button" class="add-tile" id="openAddGoalTile">
+      <span class="add-plus">+</span>
+      <span>Add goal</span>
+    </button>`;
+}
+
+function renderAccounts() {
+  $("#accountsGrid").innerHTML = ACCOUNTS.map(
+    (a) => `<article class="card account" data-account="${esc(a.name)}">
+      <div class="budget-card-head">
+        <div class="chip">${esc(a.type)}</div>
+        <button type="button" class="ghost icon-btn cat-del" data-delete-account title="Delete ${esc(a.name)}">✕</button>
+      </div>
+      <h2 style="margin-top:10px">${esc(a.name)}</h2>
+      ${a.inst ? `<div class="inst">${esc(a.inst)}</div>` : ""}
+      <div class="bal" style="color:${a.bal < 0 ? "var(--coral)" : "var(--text)"}">${money(a.bal)}</div>
+    </article>`
+  ).join("") + `<button type="button" class="add-tile" id="openAddAccTile">
+      <span class="add-plus">+</span>
+      <span>Add account</span>
+    </button>`;
+}
+
+function renderTrend() {
+  const data = [];
+  for (let i = 5; i >= 0; i -= 1) {
+    const d = new Date(year, monthIndex - i, 1);
+    const tot = totalsFor(d.getFullYear(), d.getMonth());
+    data.push([months[d.getMonth()].slice(0, 3), tot.income, tot.spent]);
+  }
+  const max = Math.max(...data.flatMap((d) => [d[1], d[2]]), 1);
+  if (data.every(([, inc, out]) => !inc && !out)) {
+    $("#trendChart").innerHTML = `<div class="empty">No activity in the last six months.</div>`;
+    return;
+  }
+  $("#trendChart").innerHTML = data
+    .map(
+      ([m, inc, out]) => `<div class="trend-col">
+        <div class="trend-bars">
+          <div class="t-in" style="height:${(inc / max) * 100}%"></div>
+          <div class="t-out" style="height:${(out / max) * 100}%"></div>
+        </div>
+        <span>${m}</span>
+      </div>`
+    )
+    .join("");
+}
+
+function renderReports() {
+  const box = $("#reportStats");
+  const subEl = $("#rptSubtitle");
+  const chip = $("#rptMonthChip");
+  const t = totals();
+  const days = new Date(year, monthIndex + 1, 0).getDate();
+  const avg = days ? t.spent / days : 0;
+  const prev = prevMonth();
+  const prevT = totalsFor(prev.y, prev.m);
+  const prevDays = new Date(prev.y, prev.m + 1, 0).getDate();
+  const avgPrev = prevDays ? prevT.spent / prevDays : 0;
+  const monthName = months[monthIndex];
+  if (chip) chip.textContent = `${monthName} ${year}`;
+  if (subEl) {
+    subEl.textContent = tx.length
+      ? `From ${tx.length} transaction${tx.length === 1 ? "" : "s"} in your ledger.`
+      : "Add transactions to see live reports.";
+  }
+
+  let avgDelta = "No spend yet";
+  let avgDir = "";
+  if (prevT.spent || t.spent) {
+    const chg = avgPrev ? ((avg - avgPrev) / avgPrev) * 100 : 0;
+    avgDelta = `${chg >= 0 ? "▲" : "▼"} ${Math.abs(chg).toFixed(1)}% vs ${months[prev.m].slice(0, 3)}`;
+    avgDir = chg > 0 ? "down" : "up";
+  }
+
+  const ranked = Object.entries(spentByCategory()).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const topName = ranked.length ? ranked[0][0] : "—";
+  const topDelta = ranked.length
+    ? `${money(ranked[0][1])} · ${t.spent ? Math.round((ranked[0][1] / t.spent) * 100) : 0}% of spend`
+    : "No spend yet";
+
+  const billsAmt = spentByCategory().Bills || 0;
+  const billsCount = tx.filter((x) => inMonth(x) && x.category === "Bills").length;
+  const billsDelta = billsCount
+    ? `${billsCount} transaction${billsCount === 1 ? "" : "s"} this month`
+    : "None this month";
+
+  if (!box) return;
+  box.innerHTML = `
+    <article class="card stat">
+      <div class="kpi-label">Avg daily spend</div>
+      <div class="kpi-value">${money(avg)}</div>
+      <div class="kpi-delta ${avgDir}">${avgDelta}</div>
+    </article>
+    <article class="card stat">
+      <div class="kpi-label">Largest category</div>
+      <div class="kpi-value">${esc(topName)}</div>
+      <div class="kpi-delta">${topDelta}</div>
+    </article>
+    <article class="card stat">
+      <div class="kpi-label">Bills</div>
+      <div class="kpi-value">${money(billsAmt)}</div>
+      <div class="kpi-delta">${billsDelta}</div>
+    </article>`;
+}
+
+function populateSelects() {
+  const cats = CATEGORIES.map((c) => c.name);
+  $("#filterCat").innerHTML =
+    `<option value="all">All categories</option>` +
+    cats.map((c) => `<option>${esc(c)}</option>`).join("");
+  $("#formCat").innerHTML = cats
+    .filter((c) => c !== "Income")
+    .map((c) => `<option>${esc(c)}</option>`)
+    .join("");
+  const accSel = $("#formAcc");
+  if (accSel) {
+    accSel.innerHTML = ACCOUNTS.length
+      ? ACCOUNTS.map((a) => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join("")
+      : `<option value="">Add an account first</option>`;
+  }
+}
+
+function closeNav() {
+  $(".app")?.classList.remove("nav-open");
+  const scrim = $("#navScrim");
+  if (scrim) scrim.hidden = true;
+}
+
+function openNav() {
+  $(".app")?.classList.add("nav-open");
+  const scrim = $("#navScrim");
+  if (scrim) scrim.hidden = false;
+}
+
+function showView(name) {
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+  $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  closeNav();
+}
+
+function refresh() {
+  $("#monthLabel").textContent = `${months[monthIndex]} ${year}`;
+  renderKpis();
+  renderCategories();
+  renderFlow();
+  renderBudgetPreview();
+  renderRecent();
+  renderTable();
+  renderBudgets();
+  renderGoals();
+  renderAccounts();
+  renderTrend();
+  renderReports();
+  renderProfile();
+  persist();
+}
+
+$$(".nav-item").forEach((btn) => btn.addEventListener("click", () => showView(btn.dataset.view)));
+$("#menuBtn")?.addEventListener("click", () => {
+  if ($(".app")?.classList.contains("nav-open")) closeNav();
+  else openNav();
+});
+$("#navScrim")?.addEventListener("click", closeNav);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeNav();
+});
+$$("[data-goto]").forEach((btn) => btn.addEventListener("click", () => showView(btn.dataset.goto)));
+
+$("#monthPrev").addEventListener("click", () => {
+  monthIndex = (monthIndex + 11) % 12;
+  if (monthIndex === 11) year -= 1;
+  refresh();
+});
+$("#monthNext").addEventListener("click", () => {
+  monthIndex = (monthIndex + 1) % 12;
+  if (monthIndex === 0) year += 1;
+  refresh();
+});
+
+$("#filterType").addEventListener("change", renderTable);
+$("#filterCat").addEventListener("change", renderTable);
+$("#globalSearch").addEventListener("input", renderTable);
+
+const modal = $("#modal");
+
+function hasMerchantKey(text, key) {
+  const t = text.toLowerCase();
+  const k = key.toLowerCase();
+  if (k.includes(" ")) return t.includes(k);
+  const safe = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${safe}([^a-z0-9]|$)`, "i").test(t);
+}
+
+function guessCategory(merchant) {
+  const q = String(merchant || "").trim().toLowerCase();
+  if (q.length < 3) return null;
+  const past = [...tx].reverse().find(
+    (t) => t.type === "expense" && String(t.merchant).trim().toLowerCase() === q && t.category !== "Income"
+  );
+  if (past && CATEGORIES.some((c) => c.name === past.category)) {
+    return { cat: past.category, from: "history" };
+  }
+  for (const row of MERCHANT_CATS) {
+    if (!CATEGORIES.some((c) => c.name === row.cat)) continue;
+    if (row.keys.some((k) => hasMerchantKey(q, k))) return { cat: row.cat, from: "name" };
+  }
+  return null;
+}
+
+function fillMerchantHints() {
+  const list = $("#merchantHints");
+  if (!list) return;
+  const names = new Set(MERCHANT_HINTS);
+  tx.forEach((t) => { if (t.merchant) names.add(t.merchant); });
+  list.innerHTML = [...names]
+    .sort((a, b) => a.localeCompare(b))
+    .map((n) => `<option value="${esc(n)}"></option>`)
+    .join("");
+}
+
+let catOverridden = false;
+let applyingGuess = false;
+let lastGuessCat = null;
+
+function applyMerchantGuess() {
+  const hint = $("#txCatHint");
+  const catSel = $("#formCat");
+  if ($("#txForm [name=type]").value === "income" || !catSel) {
+    if (hint) hint.hidden = true;
+    return;
+  }
+  const guess = guessCategory($("#txForm [name=merchant]").value);
+  const next = guess ? guess.cat : null;
+  if (next !== lastGuessCat) {
+    catOverridden = false;
+    lastGuessCat = next;
+  }
+  if (!guess) {
+    if (hint) hint.hidden = true;
+    return;
+  }
+  if (!catOverridden) {
+    applyingGuess = true;
+    catSel.value = guess.cat;
+    applyingGuess = false;
+  }
+  if (hint) {
+    const same = catSel.value === guess.cat;
+    hint.hidden = false;
+    hint.classList.toggle("over", !same);
+    hint.textContent = same
+      ? `Set to ${guess.cat}. You can change it.`
+      : `Usually ${guess.cat}. You picked ${catSel.value}.`;
+  }
+}
+
+function syncTxFormType() {
+  const isIncome = $("#txForm [name=type]").value === "income";
+  const wrap = $("#txCatWrap");
+  const row = $("#txCatRow");
+  const who = $("#txWhoName");
+  const merchant = $("#txForm [name=merchant]");
+  if (wrap) wrap.hidden = isIncome;
+  if (row) row.classList.toggle("single", isIncome);
+  if (who) who.textContent = isIncome ? "Source" : "Merchant";
+  if (merchant) merchant.placeholder = isIncome ? "Salary, freelance, refund…" : "Zepto, Swiggy, Amazon…";
+  applyMerchantGuess();
+}
+
+$("#txForm [name=type]").addEventListener("change", syncTxFormType);
+$("#txForm [name=merchant]").addEventListener("input", applyMerchantGuess);
+$("#formCat").addEventListener("change", () => {
+  if (applyingGuess) return;
+  catOverridden = true;
+  applyMerchantGuess();
+});
+
+$("#openAdd").addEventListener("click", () => {
+  modal.classList.add("open");
+  const d = new Date(year, monthIndex, Math.min(28, new Date().getDate()));
+  $("#txForm [name=date]").value = d.toISOString().slice(0, 10);
+  catOverridden = false;
+  lastGuessCat = null;
+  fillMerchantHints();
+  syncTxFormType();
+});
+$("#closeAdd").addEventListener("click", () => modal.classList.remove("open"));
+$("#cancelAdd").addEventListener("click", () => modal.classList.remove("open"));
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) modal.classList.remove("open");
+});
+
+$("#txForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const type = fd.get("type");
+  let amount = Number(fd.get("amount"));
+  if (!ACCOUNTS.length) {
+    toast("Add an account first.");
+    return;
+  }
+  if (type === "expense") amount = -Math.abs(amount);
+  tx.unshift({
+    date: fd.get("date"),
+    merchant: fd.get("merchant"),
+    category: type === "income" ? "Income" : fd.get("category"),
+    account: fd.get("account"),
+    amount,
+    type,
+  });
+  const acc = ACCOUNTS.find((a) => a.name === fd.get("account"));
+  if (acc) acc.bal += amount;
+  modal.classList.remove("open");
+  e.target.reset();
+  refresh();
+  toast("Transaction saved.");
+});
+
+function nextCatColor() {
+  const used = new Set(CATEGORIES.map((c) => c.color));
+  return CAT_COLORS.find((c) => !used.has(c)) || CAT_COLORS[CATEGORIES.length % CAT_COLORS.length];
+}
+
+function paintSwatches(selected) {
+  $("#catColorValue").value = selected;
+  $("#catColors").innerHTML = CAT_COLORS.map(
+    (c) =>
+      `<button type="button" class="swatch${c === selected ? " selected" : ""}" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`
+  ).join("");
+}
+
+function openCatModal() {
+  $("#catForm").reset();
+  paintSwatches(nextCatColor());
+  $("#catModal").classList.add("open");
+  $("#catForm [name=name]").focus();
+}
+
+function closeCatModal() {
+  $("#catModal").classList.remove("open");
+}
+
+function formatEta(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return `${months[m - 1].slice(0, 3)} ${y}`;
+}
+
+function openGoalModal() {
+  const eta = new Date(year, monthIndex + 6, 1);
+  $("#goalForm").reset();
+  $("#goalForm [name=eta]").value = `${eta.getFullYear()}-${String(eta.getMonth() + 1).padStart(2, "0")}`;
+  $("#goalForm [name=saved]").value = "0";
+  $("#goalModal").classList.add("open");
+  $("#goalForm [name=name]").focus();
+}
+
+function closeGoalModal() {
+  $("#goalModal").classList.remove("open");
+}
+
+$("#openAddCat").addEventListener("click", openCatModal);
+$("#closeAddCat").addEventListener("click", closeCatModal);
+$("#cancelAddCat").addEventListener("click", closeCatModal);
+$("#catModal").addEventListener("click", (e) => {
+  if (e.target === $("#catModal")) closeCatModal();
+});
+$("#catColors").addEventListener("click", (e) => {
+  const swatch = e.target.closest(".swatch");
+  if (swatch) paintSwatches(swatch.dataset.color);
+});
+$("#catForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const name = String(fd.get("name") || "").trim();
+  const budget = Number(fd.get("budget"));
+  const color = fd.get("color") || nextCatColor();
+  if (!name) return;
+  if (name.toLowerCase() === "income") {
+    toast("Income is reserved — pick another name.");
+    return;
+  }
+  if (CATEGORIES.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+    toast("That category already exists.");
+    return;
+  }
+  CATEGORIES.push({ name, color, budget });
+  populateSelects();
+  closeCatModal();
+  refresh();
+  toast(`${name} added to budgets.`);
+});
+
+$("#openAddGoal").addEventListener("click", openGoalModal);
+$("#closeAddGoal").addEventListener("click", closeGoalModal);
+$("#cancelAddGoal").addEventListener("click", closeGoalModal);
+$("#goalModal").addEventListener("click", (e) => {
+  if (e.target === $("#goalModal")) closeGoalModal();
+});
+$("#goalsGrid").addEventListener("click", (e) => {
+  if (e.target.closest("#openAddGoalTile")) openGoalModal();
+  const del = e.target.closest("[data-delete-goal]");
+  if (del) {
+    const card = del.closest("[data-goal]");
+    if (card) deleteGoal(card.dataset.goal);
+  }
+});
+
+function openAccModal() {
+  $("#accForm").reset();
+  $("#accForm [name=bal]").value = "0";
+  $("#accModal").classList.add("open");
+  $("#accForm [name=name]").focus();
+}
+function closeAccModal() {
+  $("#accModal").classList.remove("open");
+}
+$("#openAddAcc")?.addEventListener("click", openAccModal);
+$("#closeAddAcc")?.addEventListener("click", closeAccModal);
+$("#cancelAddAcc")?.addEventListener("click", closeAccModal);
+$("#accModal")?.addEventListener("click", (e) => {
+  if (e.target === $("#accModal")) closeAccModal();
+});
+$("#accountsGrid").addEventListener("click", (e) => {
+  if (e.target.closest("#openAddAccTile")) openAccModal();
+  const del = e.target.closest("[data-delete-account]");
+  if (del) {
+    const card = del.closest("[data-account]");
+    if (card) deleteAccount(card.dataset.account);
+  }
+});
+$("#accForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const name = String(fd.get("name") || "").trim();
+  if (!name) return;
+  if (ACCOUNTS.some((a) => a.name.toLowerCase() === name.toLowerCase())) {
+    toast("That account already exists.");
+    return;
+  }
+  ACCOUNTS.push({
+    name,
+    inst: String(fd.get("inst") || "").trim(),
+    bal: Number(fd.get("bal") || 0),
+    type: fd.get("type") || "Checking",
+  });
+  populateSelects();
+  closeAccModal();
+  refresh();
+  toast(`${name} added.`);
+});
+
+$("#goalForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const name = String(fd.get("name") || "").trim();
+  const target = Number(fd.get("target"));
+  const saved = Number(fd.get("saved") || 0);
+  const eta = formatEta(fd.get("eta"));
+  if (!name || !target) return;
+  if (GOALS.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
+    toast("That goal already exists.");
+    return;
+  }
+  GOALS.push({ name, target, saved: Math.max(0, saved), eta });
+  closeGoalModal();
+  refresh();
+  toast(`${name} added to goals.`);
+});
+
+$("#themeToggle").addEventListener("click", () => {
+  applyTheme(theme === "dark" ? "light" : "dark");
+});
+
+$("#saveJson").addEventListener("click", () => { saveJsonFile(); });
+$("#reloadJson").addEventListener("click", () => { reloadJsonFile(); });
+$("#jsonFile").addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (file) loadFromFile(file);
+});
+
+function openProfileModal() {
+  const nameInput = $("#profileForm [name=name]");
+  const initialsInput = $("#profileForm [name=initials]");
+  nameInput.value = profile.name;
+  initialsInput.value = profile.initials;
+  delete initialsInput.dataset.touched;
+  renderProfile();
+  $("#profileModal").classList.add("open");
+  nameInput.focus();
+}
+function closeProfileModal() {
+  $("#profileModal").classList.remove("open");
+}
+$("#openProfile").addEventListener("click", openProfileModal);
+$("#closeProfile").addEventListener("click", closeProfileModal);
+$("#cancelProfile").addEventListener("click", closeProfileModal);
+$("#profileModal").addEventListener("click", (e) => {
+  if (e.target === $("#profileModal")) closeProfileModal();
+});
+$("#profileForm [name=name]").addEventListener("input", (e) => {
+  const initialsInput = $("#profileForm [name=initials]");
+  if (!initialsInput.dataset.touched) initialsInput.value = initialsFrom(e.target.value);
+  $("#profilePreview").textContent = (initialsInput.value || initialsFrom(e.target.value)).toUpperCase();
+  $("#profilePreviewName").textContent = e.target.value.trim() || "Your name";
+});
+$("#profileForm [name=initials]").addEventListener("input", (e) => {
+  e.target.dataset.touched = "1";
+  e.target.value = e.target.value.toUpperCase();
+  $("#profilePreview").textContent = e.target.value || "?";
+});
+$("#profileForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = String(new FormData(e.target).get("name") || "").trim();
+  let initials = String(new FormData(e.target).get("initials") || "").trim().toUpperCase();
+  if (!name) return;
+  if (!initials) initials = initialsFrom(name);
+  profile.name = name;
+  profile.initials = initials.slice(0, 3);
+  closeProfileModal();
+  refresh();
+  toast("Profile updated.");
+});
+
+loadLocal();
+applyTheme(theme, { silent: true });
+populateSelects();
+bindFlowChart();
+bindFlowRange();
+bindBudgetGrid();
+startQuoteClock();
+refresh();
+const boot = new URLSearchParams(location.search);
+if (boot.get("view")) showView(boot.get("view"));
+if (boot.get("theme") === "dark" || boot.get("theme") === "light") applyTheme(boot.get("theme"), { silent: true });
+if (boot.get("modal") === "profile") openProfileModal();
+if (boot.get("flow") === "month" || boot.get("flow") === "30") {
+  flowRange = boot.get("flow");
+  if (flowRange === "month") flowMonthKey = flowMonthKey || dashboardMonthKey();
+  renderFlow();
+}
+if (boot.get("monthpop")) openFlowPop();
+if (boot.get("nav")) openNav();
