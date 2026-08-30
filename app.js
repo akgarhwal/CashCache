@@ -1,12 +1,12 @@
 const CATEGORIES = [
   { name: "Housing", color: "#4c8dff", budget: 0 },
-  { name: "Food", color: "#39b6e6", budget: 0 },
+  { name: "Food", color: "#e0893a", budget: 0 },
   { name: "Transport", color: "#6a8cff", budget: 0 },
   { name: "Bills", color: "#7c74e8", budget: 0 },
-  { name: "Health", color: "#5aa6f5", budget: 0 },
-  { name: "Shopping", color: "#8aaefc", budget: 0 },
-  { name: "Entertainment", color: "#4ec4c8", budget: 0 },
-  { name: "Other", color: "#7db7ff", budget: 0 },
+  { name: "Health", color: "#2f9e6e", budget: 0 },
+  { name: "Shopping", color: "#f0c44c", budget: 0 },
+  { name: "Entertainment", color: "#39b6e6", budget: 0 },
+  { name: "Other", color: "#c98a2a", budget: 0 },
   { name: "Income", color: "#2b7fff", budget: 0 },
 ];
 
@@ -179,8 +179,10 @@ const MERCHANT_HINTS = [
 ];
 
 const CAT_COLORS = [
-  "#4c8dff", "#39b6e6", "#6a8cff", "#7c74e8", "#5aa6f5", "#45c4e0",
-  "#8aaefc", "#4ec4c8", "#2b7fff", "#7db7ff", "#5b9dff", "#3ec8e0",
+  "#4c8dff", "#39b6e6", "#6a8cff", "#7c74e8",
+  "#e0b02a", "#f0c44c",
+  "#2f9e6e", "#4cba7a", "#3ec8a0",
+  "#e0893a", "#f0a04a", "#c98a2a",
 ];
 
 const MONEY_QUOTES = [
@@ -2236,6 +2238,10 @@ const boot = new URLSearchParams(location.search);
 if (boot.get("view")) showView(boot.get("view"));
 if (boot.get("theme") === "dark" || boot.get("theme") === "light") applyTheme(boot.get("theme"), { silent: true });
 if (boot.get("modal") === "profile") openProfileModal();
+if (boot.get("modal") === "add") $("#openAdd")?.click();
+if (boot.get("modal") === "category") openCatModal();
+if (boot.get("modal") === "goal") openGoalModal();
+if (boot.get("modal") === "account") openAccModal();
 if (boot.get("flow") === "month" || boot.get("flow") === "30") {
   flowRange = boot.get("flow");
   if (flowRange === "month") flowMonthKey = flowMonthKey || dashboardMonthKey();

@@ -775,15 +775,14 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
 
 .modal-backdrop {
   position: fixed; inset: 0; background: var(--modal-dim);
-  display: none; place-items: center; z-index: 20;
-}
-.modal-backdrop.open { display: grid; }
-#profileModal.open {
+  display: none;
   place-items: start center;
   align-content: start;
   justify-items: center;
   padding: 8vh 16px 32px;
+  z-index: 20;
 }
+.modal-backdrop.open { display: grid; }
 .modal {
   width: min(480px, calc(100vw - 32px));
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 18px;
@@ -896,9 +895,14 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
   .kpi-row, .grid-2, .grid-3, .budget-grid, .goals-grid, .accounts-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
   .profile-names { grid-template-columns: minmax(0, 1fr) 76px; }
-  #profileModal.open {
+  .modal-backdrop.open {
     padding: 4vh 12px 20px;
     justify-items: stretch;
+  }
+  .modal {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
   }
   .modal.profile-modal {
     width: 100%;
