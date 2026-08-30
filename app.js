@@ -71,6 +71,19 @@ let theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light"
 let lastFileHash = null;
 let lastFileName = null;
 let fileHandle = null;
+let localSavedAt = null;
+let lastPersistedHash = null;
+let announceSignIn = false;
+let cloudAuth = null;
+let cloudDb = null;
+let cloudUser = null;
+let cloudStatus = "local";
+let applyingCloud = false;
+let hydratingCloud = false;
+let cloudHydratedUid = null;
+let cloudSaveTimer = 0;
+let fileSaveTimer = 0;
+let fileSyncStatus = "none";
 let flowRange = "30";
 let flowMonthKey = null;
 
@@ -256,10 +269,10 @@ function initialsFrom(name) {
     .toUpperCase() || "?";
 }
 
-function exportState() {
+function exportState(savedAt) {
   return {
     version: 1,
-    savedAt: new Date().toISOString(),
+    savedAt: savedAt || new Date().toISOString(),
     theme,
     monthIndex,
     year,
@@ -283,31 +296,79 @@ function dataHash() {
   });
 }
 
+function linkedFileName() {
+  return (fileHandle && fileHandle.name) || lastFileName || "";
+}
+
+function linkedFileTitle() {
+  const name = linkedFileName();
+  if (!name) return "No linked file. Profile → Save file to choose one.";
+  return `Linked file: ${name}\nThe browser does not expose the full disk path.`;
+}
+
 function updateSyncUI() {
   const el = $("#syncStatus");
   if (!el) return;
-  if (!lastFileHash) {
-    el.textContent = "Not saved";
-    el.className = "sync-pill unsynced";
-    el.title = "Save file to keep a local copy";
-    return;
-  }
-  if (lastFileHash === dataHash()) {
-    el.textContent = "Synced";
+  if (cloudUser) {
+    if (cloudStatus === "saving") {
+      el.textContent = "Saving";
+      el.className = "sync-pill saving";
+      el.title = `Saving to Firebase as ${cloudUser.email || "Google"}`;
+      return;
+    }
+    if (cloudStatus === "error") {
+      el.textContent = "Offline";
+      el.className = "sync-pill unsynced";
+      el.title = "Cloud save failed. Data stays in this browser until you are back online.";
+      return;
+    }
+    el.textContent = "Cloud";
     el.className = "sync-pill synced";
-    el.title = lastFileName ? `In sync with ${lastFileName}` : "In sync with last saved file";
+    el.title = `Synced to Firebase as ${cloudUser.email || "Google"}`;
     return;
   }
-  el.textContent = "Not synced";
+  const name = linkedFileName();
+  if (fileHandle || lastFileHash) {
+    if (fileSyncStatus === "saving") {
+      el.textContent = "Saving";
+      el.className = "sync-pill saving";
+      el.title = name ? `Auto-saving ${name}` : "Saving linked file";
+      return;
+    }
+    if (fileSyncStatus === "denied") {
+      el.textContent = "Not synced";
+      el.className = "sync-pill unsynced";
+      el.title = `${linkedFileTitle()}\nClick Save file in Profile to grant write permission.`;
+      return;
+    }
+    if (lastFileHash && lastFileHash === dataHash()) {
+      el.textContent = "Synced";
+      el.className = "sync-pill synced";
+      el.title = linkedFileTitle();
+      return;
+    }
+    el.textContent = "Not synced";
+    el.className = "sync-pill unsynced";
+    el.title = name
+      ? `${linkedFileTitle()}\nUnsaved changes — will auto-save if permission is granted.`
+      : "Save a JSON file in Profile to keep a linked copy.";
+    return;
+  }
+  el.textContent = "Local";
   el.className = "sync-pill unsynced";
-  el.title = lastFileName
-    ? `Changes are not in ${lastFileName} — Save file`
-    : "Unsaved changes — Save file to sync";
+  el.title = "Stored in this browser. Profile → Save file to link a JSON file, or sign in with Google.";
 }
 
-function persist() {
+function persist(opts = {}) {
   try {
-    localStorage.setItem(STORE_DATA, JSON.stringify(exportState()));
+    const hash = dataHash();
+    const savedAt = opts.savedAt
+      || (hash === lastPersistedHash && localSavedAt)
+      || new Date().toISOString();
+    const state = exportState(savedAt);
+    localSavedAt = state.savedAt;
+    lastPersistedHash = hash;
+    localStorage.setItem(STORE_DATA, JSON.stringify(state));
     localStorage.setItem(STORE_THEME, theme);
     if (lastFileHash) localStorage.setItem(STORE_HASH, lastFileHash);
     else localStorage.removeItem(STORE_HASH);
@@ -315,6 +376,8 @@ function persist() {
     else localStorage.removeItem(STORE_FILE);
   } catch (err) {}
   updateSyncUI();
+  if (!opts.skipCloud) scheduleCloudSave();
+  if (!opts.skipFile) scheduleFileSave();
 }
 
 function replaceArr(target, next) {
@@ -378,7 +441,12 @@ function loadLocal() {
     lastFileHash = localStorage.getItem(STORE_HASH);
     lastFileName = localStorage.getItem(STORE_FILE);
     const raw = localStorage.getItem(STORE_DATA);
-    if (raw) applyState(JSON.parse(raw));
+    if (raw) {
+      const data = JSON.parse(raw);
+      localSavedAt = data.savedAt || null;
+      applyState(data);
+      lastPersistedHash = dataHash();
+    }
   } catch (err) {}
 }
 
@@ -397,6 +465,7 @@ function renderProfile() {
   if (prev) prev.textContent = profile.initials;
   const pname = $("#profilePreviewName");
   if (pname) pname.textContent = profile.name;
+  renderAuth();
 }
 
 function downloadJson(json) {
@@ -411,8 +480,128 @@ function downloadJson(json) {
   URL.revokeObjectURL(a.href);
 }
 
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("cashcache", 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains("handles")) req.result.createObjectStore("handles");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function rememberFileHandle(handle) {
+  if (!handle) return;
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("handles", "readwrite");
+      tx.objectStore("handles").put(handle, "ledger");
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (err) {}
+}
+
+async function rememberedFileHandle() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction("handles", "readonly");
+      const req = tx.objectStore("handles").get("ledger");
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
+async function ensureFilePermission(handle) {
+  if (!handle || !handle.queryPermission) return true;
+  const opts = { mode: "readwrite" };
+  try {
+    let perm = await handle.queryPermission(opts);
+    if (perm === "granted") return true;
+    if (perm === "prompt") {
+      perm = await handle.requestPermission(opts);
+      return perm === "granted";
+    }
+  } catch (err) {}
+  return false;
+}
+
+async function writeLinkedFile() {
+  if (!fileHandle) return false;
+  const json = JSON.stringify(exportState(localSavedAt), null, 2);
+  const writable = await fileHandle.createWritable();
+  await writable.write(json);
+  await writable.close();
+  lastFileName = fileHandle.name || lastFileName || "cashcache.json";
+  lastFileHash = dataHash();
+  fileSyncStatus = "synced";
+  return true;
+}
+
+function scheduleFileSave() {
+  if (cloudUser || !fileHandle) return;
+  if (lastFileHash === dataHash()) {
+    fileSyncStatus = "synced";
+    updateSyncUI();
+    return;
+  }
+  fileSyncStatus = "saving";
+  updateSyncUI();
+  clearTimeout(fileSaveTimer);
+  fileSaveTimer = setTimeout(() => { autoSaveLinkedFile(); }, 800);
+}
+
+async function autoSaveLinkedFile() {
+  if (cloudUser || !fileHandle) return;
+  if (lastFileHash === dataHash()) {
+    fileSyncStatus = "synced";
+    updateSyncUI();
+    return;
+  }
+  try {
+    const ok = await ensureFilePermission(fileHandle);
+    if (!ok) {
+      fileSyncStatus = "denied";
+      updateSyncUI();
+      return;
+    }
+    fileSyncStatus = "saving";
+    updateSyncUI();
+    await writeLinkedFile();
+    persist({ skipCloud: true, skipFile: true });
+  } catch (err) {
+    fileSyncStatus = "denied";
+  }
+  updateSyncUI();
+}
+
+async function restoreLinkedFile() {
+  const handle = await rememberedFileHandle();
+  if (!handle) return;
+  fileHandle = handle;
+  lastFileName = handle.name || lastFileName;
+  try {
+    const perm = await handle.queryPermission({ mode: "readwrite" });
+    if (perm === "granted") {
+      fileSyncStatus = lastFileHash === dataHash() ? "synced" : "unsynced";
+      if (fileSyncStatus === "unsynced") scheduleFileSave();
+    } else {
+      fileSyncStatus = "denied";
+    }
+  } catch (err) {
+    fileSyncStatus = "denied";
+  }
+  updateSyncUI();
+}
+
 async function saveJsonFile() {
-  const json = JSON.stringify(exportState(), null, 2);
+  const json = JSON.stringify(exportState(localSavedAt), null, 2);
   try {
     if (window.showSaveFilePicker) {
       if (!fileHandle) {
@@ -420,22 +609,24 @@ async function saveJsonFile() {
           suggestedName: lastFileName || "cashcache.json",
           types: [{ description: "Ledger JSON", accept: { "application/json": [".json"] } }],
         });
+        await rememberFileHandle(fileHandle);
       }
-      const writable = await fileHandle.createWritable();
-      await writable.write(json);
-      await writable.close();
-      lastFileName = fileHandle.name || lastFileName || "cashcache.json";
+      const ok = await ensureFilePermission(fileHandle);
+      if (!ok) throw new Error("permission");
+      await writeLinkedFile();
     } else {
       downloadJson(json);
+      lastFileHash = dataHash();
+      fileSyncStatus = "synced";
     }
-    lastFileHash = dataHash();
-    persist();
+    persist({ skipFile: true });
     toast(`Saved ${lastFileName || "cashcache.json"}`);
   } catch (err) {
     if (err && err.name === "AbortError") return;
     downloadJson(json);
     lastFileHash = dataHash();
-    persist();
+    fileSyncStatus = "synced";
+    persist({ skipFile: true });
     toast("Downloaded cashcache.json");
   }
 }
@@ -468,6 +659,260 @@ async function reloadJsonFile() {
     }
   } catch (err) {}
   $("#jsonFile").click();
+}
+
+function firebaseConfigured() {
+  const c = window.FIREBASE_CONFIG || {};
+  return Boolean(window.firebase && c.apiKey && c.projectId);
+}
+
+function jsonSafe(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function asIso(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  try {
+    if (typeof value.toDate === "function") return value.toDate().toISOString();
+    if (typeof value.seconds === "number") return new Date(value.seconds * 1000).toISOString();
+  } catch (err) {}
+  return "";
+}
+
+function timeMs(iso) {
+  const n = Date.parse(asIso(iso));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function workspaceLooksEmpty() {
+  return tx.length === 0 && GOALS.length === 0 && (!profile.name || profile.name === "You");
+}
+
+function cloudHasWorkspace(data) {
+  if (!data || typeof data !== "object") return false;
+  if (Array.isArray(data.transactions) && data.transactions.length) return true;
+  if (Array.isArray(data.goals) && data.goals.length) return true;
+  if (data.profile && data.profile.name && data.profile.name !== "You") return true;
+  return false;
+}
+
+function shouldUseCloud(data) {
+  if (!cloudHasWorkspace(data)) return false;
+  if (workspaceLooksEmpty()) return true;
+  return timeMs(data.savedAt) >= timeMs(localSavedAt);
+}
+
+function cloudDoc(uid) {
+  return cloudDb.collection("users").doc(uid);
+}
+
+function authErrorMessage(err) {
+  const code = err && err.code;
+  if (code === "auth/unauthorized-domain") {
+    return `Add ${location.hostname} to Firebase Authentication → Settings → Authorized domains.`;
+  }
+  if (code === "auth/operation-not-allowed") return "Enable Google as a sign-in provider in Firebase Authentication.";
+  if (code === "auth/invalid-api-key" || code === "auth/api-key-not-valid") return "Firebase API key looks invalid.";
+  if (code === "auth/configuration-not-found") return "Firebase Auth isn’t set up for this app yet.";
+  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return "";
+  return (err && err.message) || "Google sign-in failed.";
+}
+
+function renderAuth() {
+  const btn = $("#googleSignIn");
+  const signed = $("#authSignedIn");
+  const email = $("#authEmail");
+  const hint = $("#authHint");
+  const sub = $("#profilePreviewSub");
+  const localBox = $("#localBackupBox");
+  if (cloudUser) {
+    if (btn) btn.hidden = true;
+    if (signed) signed.hidden = false;
+    if (email) email.textContent = cloudUser.email || cloudUser.displayName || "Signed in";
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = "Workspace syncs to Firebase only.";
+    }
+    if (sub) sub.textContent = cloudUser.email || "Signed in";
+    if (localBox) localBox.hidden = true;
+    return;
+  }
+  if (btn) btn.hidden = false;
+  if (signed) signed.hidden = true;
+  if (localBox) localBox.hidden = false;
+  if (sub) sub.textContent = "Personal workspace";
+  if (hint) {
+    hint.hidden = false;
+    hint.textContent = firebaseConfigured()
+      ? "Sync this workspace across devices."
+      : "Cloud sync needs a Firebase web config in firebase-config.js.";
+  }
+}
+
+function adoptGoogleProfile(user) {
+  if (!user || !user.displayName) return;
+  if (profile.name && profile.name !== "You") return;
+  profile.name = user.displayName.trim();
+  profile.initials = initialsFrom(profile.name);
+}
+
+function scheduleCloudSave() {
+  if (!cloudUser || !cloudDb || applyingCloud || hydratingCloud) return;
+  cloudStatus = "saving";
+  updateSyncUI();
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(() => { saveToCloud(); }, 800);
+}
+
+async function saveToCloud() {
+  if (!cloudUser || !cloudDb || applyingCloud) return;
+  cloudStatus = "saving";
+  updateSyncUI();
+  try {
+    await cloudDoc(cloudUser.uid).set(jsonSafe(exportState(localSavedAt)));
+    cloudStatus = "ok";
+  } catch (err) {
+    cloudStatus = "error";
+    console.warn("Cloud save failed", err);
+  }
+  updateSyncUI();
+}
+
+async function hydrateFromCloud(user) {
+  if (!user || !cloudDb || hydratingCloud) return;
+  if (cloudHydratedUid === user.uid) {
+    scheduleCloudSave();
+    return;
+  }
+  const announce = announceSignIn;
+  announceSignIn = false;
+  hydratingCloud = true;
+  applyingCloud = true;
+  try {
+    const snap = await cloudDoc(user.uid).get();
+    const data = snap.exists ? snap.data() : null;
+    if (data && shouldUseCloud(data)) {
+      if (timeMs(data.savedAt) !== timeMs(localSavedAt)) {
+        applyState(data);
+        populateSelects();
+        refresh({ skipPersist: true });
+        persist({ savedAt: asIso(data.savedAt) || localSavedAt, skipCloud: true, skipFile: true });
+        toast("Loaded your cloud workspace.");
+      }
+    } else {
+      adoptGoogleProfile(user);
+      applyingCloud = false;
+      persist({ skipCloud: true, skipFile: true });
+      await saveToCloud();
+      refresh({ skipPersist: true });
+      if (announce) {
+        toast(snap.exists
+          ? "Signed in — this device’s data is now in the cloud."
+          : "Signed in — workspace will sync.");
+      }
+    }
+    cloudHydratedUid = user.uid;
+  } catch (err) {
+    cloudStatus = "error";
+    updateSyncUI();
+    toast("Signed in, but the cloud copy could not be loaded.");
+    console.warn("Cloud load failed", err);
+  } finally {
+    applyingCloud = false;
+    hydratingCloud = false;
+  }
+}
+
+async function signInWithGoogle() {
+  if (!window.firebase) {
+    toast("Firebase did not load. Check your network and refresh.");
+    return;
+  }
+  if (!firebaseConfigured() || !cloudAuth) {
+    toast("Paste your Firebase web config into firebase-config.js, then refresh.");
+    return;
+  }
+  announceSignIn = true;
+  const btn = $("#googleSignIn");
+  if (btn) {
+    btn.disabled = true;
+    const label = btn.querySelector(".google-btn-label");
+    if (label) label.textContent = "Signing in…";
+  }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  try {
+    await cloudAuth.signInWithPopup(provider);
+  } catch (err) {
+    if (err && (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment")) {
+      try {
+        await cloudAuth.signInWithRedirect(provider);
+        return;
+      } catch (redirectErr) {
+        const msg = authErrorMessage(redirectErr);
+        if (msg) toast(msg);
+      }
+    } else {
+      const msg = authErrorMessage(err);
+      if (msg) toast(msg);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      const label = btn.querySelector(".google-btn-label");
+      if (label) label.textContent = "Continue with Google";
+    }
+  }
+}
+
+async function signOutGoogle() {
+  if (!cloudAuth) return;
+  try {
+    await cloudAuth.signOut();
+    toast("Signed out. Data stays on this device and in the cloud.");
+  } catch (err) {
+    toast("Could not sign out.");
+  }
+}
+
+function initCloud() {
+  $("#googleSignIn")?.addEventListener("click", () => { signInWithGoogle(); });
+  $("#googleSignOut")?.addEventListener("click", () => { signOutGoogle(); });
+  renderAuth();
+  if (!firebaseConfigured()) return;
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
+    cloudAuth = firebase.auth();
+    cloudDb = firebase.firestore();
+    try { cloudDb.settings({ ignoreUndefinedProperties: true }); } catch (err) {}
+    cloudDb.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+  } catch (err) {
+    console.warn("Firebase init failed", err);
+    toast("Firebase could not start. Check firebase-config.js.");
+    renderAuth();
+    return;
+  }
+  cloudAuth.getRedirectResult().then((result) => {
+    if (result && result.user) announceSignIn = true;
+  }).catch((err) => {
+    const msg = authErrorMessage(err);
+    if (msg) toast(msg);
+  });
+  cloudAuth.onAuthStateChanged(async (user) => {
+    cloudUser = user || null;
+    if (!user) {
+      cloudHydratedUid = null;
+      cloudStatus = "local";
+      renderAuth();
+      updateSyncUI();
+      return;
+    }
+    cloudStatus = "ok";
+    renderAuth();
+    updateSyncUI();
+    await hydrateFromCloud(user);
+  });
 }
 
 function inMonth(t, y = year, m = monthIndex) {
@@ -1302,7 +1747,7 @@ function showView(name) {
   closeNav();
 }
 
-function refresh() {
+function refresh(opts = {}) {
   $("#monthLabel").textContent = `${months[monthIndex]} ${year}`;
   renderKpis();
   renderMerchants();
@@ -1316,7 +1761,7 @@ function refresh() {
   renderTrend();
   renderReports();
   renderProfile();
-  persist();
+  if (!opts.skipPersist) persist();
 }
 
 $$(".nav-item").forEach((btn) => btn.addEventListener("click", () => showView(btn.dataset.view)));
@@ -1742,7 +2187,6 @@ function openProfileModal() {
   delete initialsInput.dataset.touched;
   renderProfile();
   $("#profileModal").classList.add("open");
-  nameInput.focus();
 }
 function closeProfileModal() {
   $("#profileModal").classList.remove("open");
@@ -1786,6 +2230,8 @@ bindFlowRange();
 bindBudgetGrid();
 startQuoteClock();
 refresh();
+initCloud();
+restoreLinkedFile();
 const boot = new URLSearchParams(location.search);
 if (boot.get("view")) showView(boot.get("view"));
 if (boot.get("theme") === "dark" || boot.get("theme") === "light") applyTheme(boot.get("theme"), { silent: true });
