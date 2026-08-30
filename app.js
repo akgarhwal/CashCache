@@ -11,9 +11,7 @@ const CATEGORIES = [
 ];
 
 const ACCOUNTS = [
-  { name: "Everyday checking", inst: "", bal: 0, type: "Checking" },
-  { name: "Rewards card", inst: "", bal: 0, type: "Credit" },
-  { name: "High-yield savings", inst: "", bal: 0, type: "Savings" },
+  { name: "Saving Account", inst: "", bal: 0, type: "Savings" },
 ];
 
 const GOALS = [];
@@ -43,6 +41,47 @@ let flowMonthKey = null;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const money = (n) => (n < 0 ? "-" : "") + "₹" + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function statsFigures({ hero, heroLabel, pct, leftValue, leftLabel, ofValue, ofLabel, over, barPct, barColor }) {
+  const pctEl = pct == null || pct === "" ? "" : `<div class="stat-hero-pct">${pct}%</div>`;
+  return `<div class="stat-hero">
+      <div>
+        <div class="stat-hero-value${over ? " bad" : ""}">${hero}</div>
+        <div class="stat-hero-label">${heroLabel}</div>
+      </div>
+      ${pctEl}
+    </div>
+    <div class="stat-pair">
+      <div>
+        <div class="stat-pair-value${over ? " bad" : ""}">${leftValue}</div>
+        <div class="stat-pair-label">${leftLabel}</div>
+      </div>
+      <div>
+        <div class="stat-pair-value">${ofValue}</div>
+        <div class="stat-pair-label">${ofLabel}</div>
+      </div>
+    </div>
+    <div class="bar thick"><span style="width:${barPct}%;background:${barColor}"></span></div>`;
+}
+
+function budgetStatModel(cat, spent) {
+  const cap = cat.budget || 0;
+  const over = cap > 0 && spent > cap;
+  const left = cap - spent;
+  const pct = cap ? Math.round(Math.min(999, (spent / cap) * 100)) : null;
+  return {
+    hero: money(spent),
+    heroLabel: "spent",
+    pct,
+    leftValue: over ? money(spent - cap) : money(Math.max(0, left)),
+    leftLabel: over ? "over" : "left",
+    ofValue: money(cap),
+    ofLabel: "of budget",
+    over,
+    barPct: cap ? Math.min(100, (spent / cap) * 100) : 0,
+    barColor: over ? "var(--coral)" : cat.color,
+  };
+}
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -768,12 +807,15 @@ function renderBudgetPreview() {
     .slice(0, 5)
     .map((c) => {
       const used = spent[c.name] || 0;
-      const pct = Math.min(100, (used / c.budget) * 100);
       const over = used > c.budget;
+      const pct = Math.round(Math.min(999, (used / c.budget) * 100));
+      const left = c.budget - used;
       return `<div class="bp ${over ? "over" : ""}">
-        <div>${c.name}</div>
-        <div class="amt">${money(used)} / ${money(c.budget)}</div>
-        <div class="bar"><span style="width:${pct}%;background:${over ? "var(--coral)" : c.color}"></span></div>
+        <div class="bp-name">${esc(c.name)}</div>
+        <div class="bp-pct">${pct}%</div>
+        <div class="bp-hero">${money(used)}</div>
+        <div class="bp-of">${over ? "over by " + money(used - c.budget) : money(Math.max(0, left)) + " left"} · of ${money(c.budget)}</div>
+        <div class="bar thick"><span style="width:${Math.min(100, pct)}%;background:${over ? "var(--coral)" : c.color}"></span></div>
       </div>`;
     })
     .join("");
@@ -854,15 +896,8 @@ function updateBudgetSummary() {
 
 function paintBudgetCard(card, cat) {
   const spent = spentByCategory()[cat.name] || 0;
-  const left = cat.budget - spent;
-  const pct = Math.min(100, cat.budget ? (spent / cat.budget) * 100 : 0);
-  const meta = card.querySelector(".meta");
-  if (meta) meta.textContent = `${money(spent)} spent · ${money(left)} left of ${money(cat.budget)}`;
-  const fill = card.querySelector(".bar > span");
-  if (fill) {
-    fill.style.width = `${pct}%`;
-    fill.style.background = spent > cat.budget ? "var(--coral)" : cat.color;
-  }
+  const block = card.querySelector(".stat-block");
+  if (block) block.innerHTML = statsFigures(budgetStatModel(cat, spent));
 }
 
 function applyBudget(name, value, source) {
@@ -908,16 +943,13 @@ function renderBudgets() {
   $("#budgetGrid").innerHTML = CATEGORIES.filter((c) => c.name !== "Income")
     .map((c) => {
       const s = spent[c.name] || 0;
-      const pct = Math.min(100, c.budget ? (s / c.budget) * 100 : 0);
-      const left = c.budget - s;
       const max = sliderMaxFor(c.budget);
       return `<article class="card budget-card" data-cat="${esc(c.name)}">
         <div class="budget-card-head">
           <h3><span class="cat-dot" style="background:${c.color}"></span>${esc(c.name)}</h3>
           <button type="button" class="ghost icon-btn cat-del" data-delete title="Delete ${esc(c.name)}">✕</button>
         </div>
-        <div class="meta">${money(s)} spent · ${money(left)} left of ${money(c.budget)}</div>
-        <div class="bar"><span style="width:${pct}%;background:${s > c.budget ? "var(--coral)" : c.color}"></span></div>
+        <div class="stat-block">${statsFigures(budgetStatModel(c, s))}</div>
         <div class="budget-edit">
           <input type="range" min="0" max="${max}" step="10" value="${c.budget}" aria-label="${esc(c.name)} budget" style="accent-color:${c.color}" />
           <input type="number" class="budget-num" min="0" step="10" value="${c.budget}" aria-label="${esc(c.name)} budget amount" />
@@ -981,8 +1013,11 @@ function deleteAccount(name) {
 
 function renderGoals() {
   $("#goalsGrid").innerHTML = GOALS.map((g) => {
-    const pct = Math.min(100, Math.round((g.saved / g.target) * 100) || 0);
-    const deg = Math.round(pct * 3.6);
+    const target = g.target || 0;
+    const saved = g.saved || 0;
+    const over = target > 0 && saved > target;
+    const left = Math.max(0, target - saved);
+    const pct = target ? Math.round(Math.min(999, (saved / target) * 100)) : null;
     return `<article class="card goal" data-goal="${esc(g.name)}">
       <div class="budget-card-head">
         <div>
@@ -991,15 +1026,18 @@ function renderGoals() {
         </div>
         <button type="button" class="ghost icon-btn cat-del" data-delete-goal title="Delete ${esc(g.name)}">✕</button>
       </div>
-      <div class="ring-wrap">
-        <div class="ring" style="background:conic-gradient(var(--mint) ${deg}deg, var(--ring-track) 0)">
-          <div style="width:54px;height:54px;border-radius:50%;background:var(--surface);display:grid;place-items:center">${pct}%</div>
-        </div>
-        <div>
-          <div class="kpi-value" style="font-size:18px">${money(g.saved)}</div>
-          <div class="muted">of ${money(g.target)}</div>
-        </div>
-      </div>
+      <div class="stat-block">${statsFigures({
+        hero: money(saved),
+        heroLabel: "saved",
+        pct,
+        leftValue: over ? money(saved - target) : money(left),
+        leftLabel: over ? "over" : "left",
+        ofValue: money(target),
+        ofLabel: "of target",
+        over,
+        barPct: target ? Math.min(100, (saved / target) * 100) : 0,
+        barColor: over ? "var(--coral)" : "var(--mint)",
+      })}</div>
     </article>`;
   }).join("") + `<button type="button" class="add-tile" id="openAddGoalTile">
       <span class="add-plus">+</span>
@@ -1007,18 +1045,26 @@ function renderGoals() {
     </button>`;
 }
 
+function lastTxForAccount(name) {
+  return tx
+    .filter((t) => t.account === name)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+}
+
 function renderAccounts() {
-  $("#accountsGrid").innerHTML = ACCOUNTS.map(
-    (a) => `<article class="card account" data-account="${esc(a.name)}">
+  $("#accountsGrid").innerHTML = ACCOUNTS.map((a) => {
+    const last = lastTxForAccount(a.name);
+    return `<article class="card account" data-account="${esc(a.name)}">
       <div class="budget-card-head">
         <div class="chip">${esc(a.type)}</div>
         <button type="button" class="ghost icon-btn cat-del" data-delete-account title="Delete ${esc(a.name)}">✕</button>
       </div>
-      <h2 style="margin-top:10px">${esc(a.name)}</h2>
+      <h2>${esc(a.name)}</h2>
       ${a.inst ? `<div class="inst">${esc(a.inst)}</div>` : ""}
       <div class="bal" style="color:${a.bal < 0 ? "var(--coral)" : "var(--text)"}">${money(a.bal)}</div>
-    </article>`
-  ).join("") + `<button type="button" class="add-tile" id="openAddAccTile">
+      ${last ? `<div class="last-tx">Last · ${esc(last.merchant)} · ${esc(last.date)}</div>` : `<div class="last-tx">No activity yet</div>`}
+    </article>`;
+  }).join("") + `<button type="button" class="add-tile" id="openAddAccTile">
       <span class="add-plus">+</span>
       <span>Add account</span>
     </button>`;
@@ -1043,6 +1089,7 @@ function renderTrend() {
           <div class="t-in" style="height:${(inc / max) * 100}%"></div>
           <div class="t-out" style="height:${(out / max) * 100}%"></div>
         </div>
+        <div class="trend-amt">${compactINR(inc)}<br>${compactINR(out)}</div>
         <span>${m}</span>
       </div>`
     )
