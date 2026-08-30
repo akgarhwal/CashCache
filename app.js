@@ -888,10 +888,6 @@ function renderTable() {
     .join("");
 }
 
-function sliderMaxFor(budget) {
-  return Math.max(10000, Math.ceil(Math.max(budget, 50) / 100) * 100);
-}
-
 function budgetCardEl(name) {
   return $$("#budgetGrid [data-cat]").find((el) => el.dataset.cat === name);
 }
@@ -923,13 +919,7 @@ function applyBudget(name, value, source) {
   const card = budgetCardEl(name);
   if (card) {
     paintBudgetCard(card, cat);
-    const range = card.querySelector("input[type=range]");
     const num = card.querySelector("input[type=number]");
-    const max = sliderMaxFor(n);
-    if (range) {
-      if (Number(range.max) < n) range.max = max;
-      if (source !== "range") range.value = n;
-    }
     if (num && source !== "number") num.value = n;
   }
   updateBudgetSummary();
@@ -957,17 +947,15 @@ function renderBudgets() {
   $("#budgetGrid").innerHTML = CATEGORIES.filter((c) => c.name !== "Income")
     .map((c) => {
       const s = spent[c.name] || 0;
-      const max = sliderMaxFor(c.budget);
       return `<article class="card budget-card" data-cat="${esc(c.name)}">
         <div class="budget-card-head">
           <h3><span class="cat-dot" style="background:${c.color}"></span>${esc(c.name)}</h3>
           <button type="button" class="ghost icon-btn cat-del" data-delete title="Delete ${esc(c.name)}">✕</button>
         </div>
         <div class="stat-block">${statsFigures(budgetStatModel(c, s))}</div>
-        <div class="budget-edit">
-          <input type="range" min="0" max="${max}" step="10" value="${c.budget}" aria-label="${esc(c.name)} budget" style="accent-color:${c.color}" />
-          <input type="number" class="budget-num" min="0" step="10" value="${c.budget}" aria-label="${esc(c.name)} budget amount" />
-        </div>
+        <label class="budget-edit">Monthly cap (₹)
+          <input type="number" class="budget-num" min="0" step="10" value="${c.budget}" aria-label="${esc(c.name)} monthly cap" />
+        </label>
       </article>`;
     })
     .join("") + `<button type="button" class="add-tile" id="openAddCatTile">
@@ -993,7 +981,6 @@ function bindBudgetGrid() {
     const card = e.target.closest("[data-cat]");
     if (!card) return;
     const name = card.dataset.cat;
-    if (e.target.matches("input[type=range]")) applyBudget(name, e.target.value, "range");
     if (e.target.matches("input[type=number]")) {
       const n = Number(e.target.value);
       if (Number.isFinite(n) && n >= 0) applyBudget(name, n, "number");

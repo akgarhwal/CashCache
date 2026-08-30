@@ -14,7 +14,7 @@ Screenshots use the bundled sample ledger in [`examples/demo.json`](examples/dem
 
 - **Dashboard** — net cash, income, spend, savings rate, spend-by-category, and a 30-day or calendar-month cash-flow chart
 - **Transactions** — search, filter by type/category, and a dated ledger table
-- **Budgets** — per-category caps with sliders, typed amounts, and over-budget highlighting
+- **Budgets** — per-category caps with typed amounts and over-budget highlighting
 - **Goals** — savings targets with progress rings
 - **Reports** — average daily spend, top category, bills, and a six-month income vs spend trend
 - **Accounts** — checking, savings, credit, and cash; balances update when you add activity

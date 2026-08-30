@@ -551,14 +551,18 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
 }
 .budget-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-shrink: 0; }
 .budget-card h3 { font-size: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 8px; }
-.budget-card input[type="range"] { width: 100%; accent-color: var(--mint); }
 .budget-edit {
-  display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 4px;
   flex-shrink: 0;
+  font-size: var(--text-label);
+  color: var(--muted);
 }
 .budget-num {
-  font-family: var(--mono); font-size: var(--text-data); text-align: right; width: 100%;
+  font-family: var(--mono); font-size: var(--text-amount); text-align: right; width: 140px;
   background: var(--bg-2); padding: 8px 10px;
 }
 
