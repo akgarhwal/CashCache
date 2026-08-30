@@ -262,7 +262,7 @@ h2 { font-size: 16px; font-weight: 600; }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .budget-grid, .goals-grid, .accounts-grid {
   grid-template-columns: repeat(2, 1fr);
-  grid-auto-rows: 1fr;
+  grid-auto-rows: minmax(280px, 1fr);
   align-content: stretch;
   margin-bottom: 0;
 }
@@ -545,9 +545,9 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
 .budget-card, .goal, .account {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   height: 100%;
-  min-height: 220px;
+  min-height: 280px;
 }
 .budget-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-shrink: 0; }
 .budget-card h3 { font-size: 16px; margin-bottom: 0; display: flex; align-items: center; gap: 8px; }
@@ -568,11 +568,11 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
   justify-content: space-between;
   gap: 12px;
   flex: 1;
-  min-height: 72px;
+  min-height: 88px;
 }
 .stat-hero-value {
   font-family: var(--mono);
-  font-size: var(--text-kpi);
+  font-size: 40px;
   letter-spacing: -.04em;
   line-height: 1.05;
   font-weight: 500;
@@ -599,7 +599,7 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
 }
 .stat-pair-value {
   font-family: var(--mono);
-  font-size: var(--text-amount);
+  font-size: 22px;
   letter-spacing: -.03em;
   line-height: 1.15;
 }
@@ -740,7 +740,8 @@ select, input[type="date"], input[type="month"], input[type="number"], input[typ
   .app.nav-open .nav-scrim { display: block; }
   .kpi-row, .grid-2, .grid-3, .budget-grid, .goals-grid, .accounts-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
-  .stat-hero-value, .kpi-value, .account .bal { font-size: 28px; }
+  .stat-hero-value { font-size: 32px; }
+  .kpi-value, .account .bal { font-size: 28px; }
   .cat-row { grid-template-columns: 1fr; gap: 6px; }
   .table { font-size: var(--text-data); }
   .card.flush { overflow-x: auto; }
