@@ -13,6 +13,20 @@ const CATEGORIES = [
 const ACCOUNTS = [
   { name: "Saving Account", inst: "", bal: 0, type: "Savings" },
 ];
+const OLD_DEFAULT_ACCOUNTS = ["Everyday checking", "Rewards card", "High-yield savings"];
+
+function migrateDefaultAccounts() {
+  const names = ACCOUNTS.map((a) => a.name);
+  const isOldSeed =
+    names.length === 3 && OLD_DEFAULT_ACCOUNTS.every((n) => names.includes(n));
+  if (!isOldSeed) return;
+  const unused =
+    ACCOUNTS.every((a) => !a.bal) &&
+    !tx.some((t) => OLD_DEFAULT_ACCOUNTS.includes(t.account));
+  if (!unused) return;
+  ACCOUNTS.length = 0;
+  ACCOUNTS.push({ name: "Saving Account", inst: "", bal: 0, type: "Savings" });
+}
 
 const GOALS = [];
 let tx = [];
@@ -1574,6 +1588,7 @@ $("#profileForm").addEventListener("submit", (e) => {
 });
 
 loadLocal();
+migrateDefaultAccounts();
 applyTheme(theme, { silent: true });
 populateSelects();
 bindFlowChart();
